@@ -11,8 +11,6 @@ import {
   Home,
   ImageIcon,
   Lock,
-  Heart,
-  HeartHandshake,
   Info,
   Loader2,
   Globe,
@@ -215,7 +213,6 @@ const STORY_EXPIRE_MS = 24 * 60 * 60 * 1000;
 const STORY_DISPLAY_MS = 30 * 1000;
 const STORY_VIDEO_MAX_SECONDS = 60;
 const STORY_MARKER_REGEX = /^\[\[story:(text|music|video)(?::([a-z0-9_-]+))?\]\]\s*/i;
-const LOVE_MARKER_REGEX = /^\[\[love:(couple|single)\]\]\s*/i;
 
 type StoryMusicTrack = {
   id: string;
@@ -269,18 +266,6 @@ const stripStoryMarker = (content?: string | null) => {
   const raw = content || "";
   return raw.replace(STORY_MARKER_REGEX, "").trim();
 };
-const getLovePostType = (content?: string | null): "couple" | "single" | null => {
-  const raw = content || "";
-  const match = raw.match(LOVE_MARKER_REGEX);
-  const type = match?.[1]?.toLowerCase();
-  if (type === "couple" || type === "single") return type;
-  return null;
-};
-const stripLoveMarker = (content?: string | null) => {
-  const raw = content || "";
-  return raw.replace(LOVE_MARKER_REGEX, "").trim();
-};
-const stripMetaMarkers = (content?: string | null) => stripLoveMarker(stripStoryMarker(content));
 
 const isStoryActive = (createdAt?: string) => {
   if (!createdAt) return false;
@@ -418,7 +403,7 @@ const FeedView = () => {
   const [storyPickerOpen, setStoryPickerOpen] = useState(false);
   const [storyMusicLibraryOpen, setStoryMusicLibraryOpen] = useState(false);
   const [composerMode, setComposerMode] = useState<"post" | "story">("post");
-  const [postIntent, setPostIntent] = useState<"normal" | "love_couple" | "love_single">("normal");
+  const [, setPostIntent] = useState<"normal" | "love_couple" | "love_single">("normal");
   const [pendingStoryType, setPendingStoryType] = useState<"text" | "music" | "video" | null>(null);
   const [pendingStoryMusicId, setPendingStoryMusicId] = useState<string | null>(null);
   const [storyOnlyPostIds, setStoryOnlyPostIds] = useState<string[]>([]);
@@ -1290,17 +1275,6 @@ const FeedView = () => {
     setStoryMusicLibraryOpen(false);
     setComposerMode("post");
     setPostIntent("normal");
-    setPendingStoryType(null);
-    setPendingStoryMusicId(null);
-    setPostFlowOpen(true);
-    setPostStep("composer");
-    setPendingMediaAction(null);
-  };
-
-  const openLoveComposer = (intent: "love_couple" | "love_single") => {
-    setStoryMusicLibraryOpen(false);
-    setComposerMode("post");
-    setPostIntent(intent);
     setPendingStoryType(null);
     setPendingStoryMusicId(null);
     setPostFlowOpen(true);
