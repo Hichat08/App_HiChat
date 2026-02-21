@@ -287,7 +287,11 @@ export const updateProfile = async (req, res) => {
     }
 
     if (typeof hometown === "string") {
-      updatePayload.hometown = hometown.trim();
+      const normalizedHometown = hometown.trim();
+      if (!normalizedHometown) {
+        return res.status(400).json({ message: "Quê quán là bắt buộc" });
+      }
+      updatePayload.hometown = normalizedHometown;
     }
 
     if (typeof birthday === "string") {

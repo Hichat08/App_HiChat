@@ -1,6 +1,7 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Check, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -56,9 +57,14 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
     loadRelationshipRequests();
   }, []);
 
+  const normalizedRelationshipKeyword = relationshipKeyword.trim();
+
   useEffect(() => {
-    const keyword = relationshipKeyword.trim();
-    if (formState.relationshipStatus !== "in_relationship" || userInfo.relationshipPartner || !keyword) {
+    if (
+      formState.relationshipStatus !== "in_relationship" ||
+      userInfo.relationshipPartner ||
+      normalizedRelationshipKeyword.length < 2
+    ) {
       setRelationshipResults([]);
       return;
     }
@@ -67,24 +73,31 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
     const timer = setTimeout(async () => {
       try {
         setSearchingPartner(true);
-        const found = await friendService.searchUsers(keyword);
+        const found = await friendService.searchUsers(normalizedRelationshipKeyword);
         if (!alive) return;
-        setRelationshipResults(
-          (found || []).filter((item: User) => item?._id && item._id !== me?._id)
-        );
+        setRelationshipResults((found || []).filter((item: User) => item?._id && item._id !== me?._id));
       } catch (error) {
         if (!alive) return;
         setRelationshipResults([]);
       } finally {
         if (alive) setSearchingPartner(false);
       }
-    }, 250);
+    }, 300);
 
     return () => {
       alive = false;
       clearTimeout(timer);
     };
-  }, [formState.relationshipStatus, relationshipKeyword, userInfo.relationshipPartner, me?._id]);
+  }, [formState.relationshipStatus, normalizedRelationshipKeyword, userInfo.relationshipPartner, me?._id]);
+
+  const sortedRelationshipResults = useMemo(() => {
+    if (!relationshipResults.length) return [];
+    return [...relationshipResults].sort((a, b) => {
+      const aSelected = selectedPartner?._id === a._id ? 1 : 0;
+      const bSelected = selectedPartner?._id === b._id ? 1 : 0;
+      return bSelected - aSelected;
+    });
+  }, [relationshipResults, selectedPartner?._id]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -233,22 +246,43 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
 
           {formState.relationshipStatus === "in_relationship" && (
             <div className="space-y-3 rounded-xl border p-3">
-              <Label>Chọn người muốn hẹn hò</Label>
-              {userInfo.relationshipPartner ? (
-                <p className="text-sm text-muted-foreground">
-                  Bạn đang hẹn hò với {userInfo.relationshipPartner.displayName}.
+              <div className="space-y-1">
+                <Label>Chọn người muốn hẹn hò</Label>
+                <p className="text-xs text-muted-foreground">
+                  Nhập tối thiểu 2 ký tự để tìm theo tên hiển thị hoặc username.
                 </p>
+              </div>
+              {userInfo.relationshipPartner ? (
+                <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                  Bạn đang hẹn hò với <span className="font-semibold">{userInfo.relationshipPartner.displayName}</span>.
+                </div>
               ) : (
                 <>
-                  <Input
-                    placeholder="Nhập tên hiển thị hoặc username..."
-                    value={relationshipKeyword}
-                    onChange={(event) => setRelationshipKeyword(event.target.value)}
-                  />
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      className="pl-9"
+                      placeholder="Ví dụ: Nguyễn Văn A hoặc @username"
+                      value={relationshipKeyword}
+                      onChange={(event) => setRelationshipKeyword(event.target.value)}
+                    />
+                  </div>
 
                   {selectedPartner && (
-                    <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
-                      Đã chọn: <span className="font-medium">{selectedPartner.displayName}</span>
+                    <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                      <span>
+                        Đã chọn: <span className="font-semibold">{selectedPartner.displayName}</span>
+                      </span>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        onClick={() => setSelectedPartner(null)}
+                        title="Bỏ chọn"
+                      >
+                        <X className="size-4" />
+                      </Button>
                     </div>
                   )}
 
@@ -256,25 +290,37 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
                     <p className="text-xs text-muted-foreground">Đang tìm người dùng...</p>
                   )}
 
-                  {relationshipResults.length > 0 && (
-                    <div className="max-h-48 space-y-1 overflow-auto rounded-md border bg-background p-1">
-                      {relationshipResults.map((user) => (
-                        <button
-                          key={user._id}
-                          type="button"
-                          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-muted/50"
-                          onClick={() => setSelectedPartner(user)}
-                        >
-                          <Avatar className="h-7 w-7">
-                            <AvatarImage src={user.avatarUrl ?? undefined} alt={user.displayName} />
-                            <AvatarFallback>{user.displayName?.charAt(0) || "U"}</AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">{user.displayName}</p>
-                            <p className="truncate text-xs text-muted-foreground">@{user.username}</p>
-                          </div>
-                        </button>
-                      ))}
+                  {!searchingPartner && normalizedRelationshipKeyword.length > 0 && normalizedRelationshipKeyword.length < 2 && (
+                    <p className="text-xs text-muted-foreground">Vui lòng nhập ít nhất 2 ký tự để bắt đầu tìm kiếm.</p>
+                  )}
+
+                  {!searchingPartner && normalizedRelationshipKeyword.length >= 2 && sortedRelationshipResults.length === 0 && (
+                    <p className="text-xs text-muted-foreground">Không tìm thấy người phù hợp.</p>
+                  )}
+
+                  {sortedRelationshipResults.length > 0 && (
+                    <div className="max-h-52 space-y-1 overflow-auto rounded-md border bg-background p-1">
+                      {sortedRelationshipResults.map((user) => {
+                        const isSelected = selectedPartner?._id === user._id;
+                        return (
+                          <button
+                            key={user._id}
+                            type="button"
+                            className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-muted/50 ${isSelected ? "bg-muted" : ""}`}
+                            onClick={() => setSelectedPartner(user)}
+                          >
+                            <Avatar className="h-7 w-7">
+                              <AvatarImage src={user.avatarUrl ?? undefined} alt={user.displayName} />
+                              <AvatarFallback>{user.displayName?.charAt(0) || "U"}</AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium">{user.displayName}</p>
+                              <p className="truncate text-xs text-muted-foreground">@{user.username}</p>
+                            </div>
+                            {isSelected && <Check className="size-4 text-primary" />}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </>

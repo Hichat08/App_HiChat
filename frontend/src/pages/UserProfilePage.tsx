@@ -13,11 +13,13 @@ import {
   ArrowLeft,
   Cake,
   Camera,
+  CirclePlay,
   ChevronDown,
   Ellipsis,
   Globe,
   Heart,
   House,
+  Image,
   Info,
   Mail,
   MapPin,
@@ -45,6 +47,7 @@ import { useFriendStore } from "@/stores/useFriendStore";
 import { friendService } from "@/services/friendService";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 
 type ProfileStats = {
   friendCount: number | null;
@@ -92,6 +95,20 @@ const contactVisibilityLabel: Record<"only_me" | "public" | "friends", string> =
   friends: "Bạn bè",
 };
 
+const STORY_MARKER_REGEX = /^\[\[story:(text|music|video)(?::([a-z0-9_-]+))?\]\]\s*/i;
+const STORY_EXPIRE_MS = 24 * 60 * 60 * 1000;
+
+const isStoryPost = (content?: string | null) => STORY_MARKER_REGEX.test(content || "");
+
+const stripStoryMarker = (content?: string | null) => (content || "").replace(STORY_MARKER_REGEX, "").trim();
+
+const isStoryActive = (createdAt?: string) => {
+  if (!createdAt) return false;
+  const createdMs = new Date(createdAt).getTime();
+  if (Number.isNaN(createdMs)) return false;
+  return Date.now() - createdMs <= STORY_EXPIRE_MS;
+};
+
 const UserProfilePage = () => {
   const { userId } = useParams();
   const navigate = useNavigate();
@@ -123,6 +140,13 @@ const UserProfilePage = () => {
     createdAt: string;
   } | null>(null);
   const [photoActionLoading, setPhotoActionLoading] = useState(false);
+  const [avatarActionOpen, setAvatarActionOpen] = useState(false);
+  const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
+  const [storyPreviewOpen, setStoryPreviewOpen] = useState(false);
+  const [locationRequiredOpen, setLocationRequiredOpen] = useState(false);
+  const [savingRequiredLocation, setSavingRequiredLocation] = useState(false);
+  const [requiredHometown, setRequiredHometown] = useState("");
+  const [requiredCurrentCity, setRequiredCurrentCity] = useState("");
   const [stats, setStats] = useState<ProfileStats>({
     friendCount: null,
     mutualCount: null,
@@ -130,6 +154,12 @@ const UserProfilePage = () => {
   });
   const { openDirectConversation } = useChatStore();
   const { addFriend } = useFriendStore();
+
+  const latestActiveStory = useMemo(() => {
+    return userPosts
+      .filter((post) => isStoryPost(post.content) && isStoryActive(post.createdAt))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] || null;
+  }, [userPosts]);
 
   useEffect(() => {
     let cancelled = false;
@@ -232,6 +262,19 @@ const UserProfilePage = () => {
   const currentContactVisibility =
     (currentUserInfo?.contactInfoVisibility as "only_me" | "public" | "friends" | undefined) ||
     "friends";
+
+  useEffect(() => {
+    if (!isMe || !currentUserInfo?._id) {
+      setLocationRequiredOpen(false);
+      return;
+    }
+
+    const hometown = (currentUserInfo.hometown || "").trim();
+    const currentCity = (currentUserInfo.currentCity || "").trim();
+    setRequiredHometown(hometown);
+    setRequiredCurrentCity(currentCity);
+    setLocationRequiredOpen(!hometown);
+  }, [isMe, currentUserInfo?._id, currentUserInfo?.hometown, currentUserInfo?.currentCity]);
 
   const handleOpenMessage = async () => {
     const targetUserId = currentUserInfo?._id;
@@ -518,6 +561,33 @@ const UserProfilePage = () => {
     }
   };
 
+  const handleSaveRequiredLocation = async () => {
+    if (!isMe) return;
+    const hometown = requiredHometown.trim();
+    const currentCity = requiredCurrentCity.trim();
+
+    if (!hometown) {
+      toast.warning("Vui lòng nhập quê quán trước khi tiếp tục.");
+      return;
+    }
+
+    try {
+      setSavingRequiredLocation(true);
+      const { user, message } = await userService.updateProfile({
+        hometown,
+        currentCity,
+      });
+      setUser(user);
+      setProfileUser((prev) => (prev ? { ...prev, ...user } : user));
+      setLocationRequiredOpen(false);
+      toast.success(message || "Đã cập nhật thông tin nơi ở");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Không thể cập nhật thông tin nơi ở");
+    } finally {
+      setSavingRequiredLocation(false);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-muted/40 p-3 sm:p-4">
       <div className="mx-auto max-w-5xl space-y-3">
@@ -566,12 +636,19 @@ const UserProfilePage = () => {
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                     <div className="relative -mt-16 h-28 w-28 shrink-0 sm:-mt-20 sm:h-36 sm:w-36 md:h-40 md:w-40">
-                      <Avatar className="h-full w-full border-4 border-background shadow-md">
-                        <AvatarImage src={currentUserInfo.avatarUrl} alt={currentUserInfo.displayName} />
-                        <AvatarFallback className="text-3xl sm:text-4xl">
-                          {currentUserInfo.displayName?.charAt(0) || "U"}
-                        </AvatarFallback>
-                      </Avatar>
+                      <button
+                        type="button"
+                        className="h-full w-full rounded-full"
+                        onClick={() => setAvatarActionOpen(true)}
+                        title="Xem tùy chọn avatar"
+                      >
+                        <Avatar className="h-full w-full border-4 border-background shadow-md">
+                          <AvatarImage src={currentUserInfo.avatarUrl} alt={currentUserInfo.displayName} />
+                          <AvatarFallback className="text-3xl sm:text-4xl">
+                            {currentUserInfo.displayName?.charAt(0) || "U"}
+                          </AvatarFallback>
+                        </Avatar>
+                      </button>
                       {isMe && <AvatarUploader />}
                     </div>
 
@@ -607,13 +684,22 @@ const UserProfilePage = () => {
 
                   <div className="flex flex-wrap items-center gap-2">
                     {isMe ? (
-                      <Button
-                        variant={editingBio ? "secondary" : "default"}
-                        className="h-10 px-4 text-sm"
-                        onClick={handleToggleBioEditor}
-                      >
-                        {editingBio ? "Đóng sửa tiểu sử" : "Sửa thông tin cá nhân"}
-                      </Button>
+                      <>
+                        <Button
+                          variant={editingBio ? "secondary" : "default"}
+                          className="h-10 px-4 text-sm"
+                          onClick={handleToggleBioEditor}
+                        >
+                          {editingBio ? "Đóng sửa tiểu sử" : "Sửa thông tin cá nhân"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="h-10 px-4 text-sm"
+                          onClick={() => navigate("/archive")}
+                        >
+                          Kho lưu trữ
+                        </Button>
+                      </>
                     ) : (
                       <Button
                         variant={isFriend || friendRequestSent ? "secondary" : "outline"}
@@ -1150,6 +1236,147 @@ const UserProfilePage = () => {
               />
             </div>
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={avatarActionOpen} onOpenChange={setAvatarActionOpen}>
+        <DialogContent className="w-[calc(100vw-24px)] max-w-sm rounded-2xl p-0">
+          <DialogHeader className="border-b px-4 py-3">
+            <DialogTitle className="text-center text-lg font-bold">Ảnh đại diện</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 p-4">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 w-full justify-start"
+              onClick={() => {
+                setAvatarActionOpen(false);
+                setStoryPreviewOpen(true);
+              }}
+              disabled={!latestActiveStory}
+            >
+              <CirclePlay className="mr-2 size-4" />
+              Xem story
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 w-full justify-start"
+              onClick={() => {
+                setAvatarActionOpen(false);
+                setAvatarPreviewOpen(true);
+              }}
+              disabled={!currentUserInfo?.avatarUrl}
+            >
+              <Image className="mr-2 size-4" />
+              Xem ảnh avatar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={avatarPreviewOpen} onOpenChange={setAvatarPreviewOpen}>
+        <DialogContent className="w-[calc(100vw-24px)] max-w-2xl p-0">
+          <DialogHeader className="border-b px-4 py-3">
+            <DialogTitle>Ảnh avatar</DialogTitle>
+          </DialogHeader>
+          {currentUserInfo?.avatarUrl ? (
+            <div className="max-h-[75vh] overflow-auto bg-muted/30 p-2">
+              <img
+                src={currentUserInfo.avatarUrl}
+                alt={currentUserInfo.displayName}
+                className="mx-auto max-h-[72vh] w-auto max-w-full object-contain"
+              />
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={storyPreviewOpen} onOpenChange={setStoryPreviewOpen}>
+        <DialogContent className="w-[calc(100vw-24px)] max-w-md p-0">
+          <DialogHeader className="border-b px-4 py-3">
+            <DialogTitle>Story gần nhất</DialogTitle>
+          </DialogHeader>
+          {latestActiveStory ? (
+            <div className="space-y-3 p-4">
+              {latestActiveStory.media?.[0]?.url ? (
+                <img
+                  src={latestActiveStory.media[0].url}
+                  alt="story-preview"
+                  className="max-h-[55vh] w-full rounded-xl object-cover"
+                />
+              ) : (
+                <div className="rounded-xl bg-muted p-4 text-center text-sm text-muted-foreground">
+                  {stripStoryMarker(latestActiveStory.content) || "Story văn bản"}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">{formatPostAgo(latestActiveStory.createdAt)}</p>
+            </div>
+          ) : (
+            <div className="p-4 text-sm text-muted-foreground">Hiện chưa có story nào còn hiệu lực.</div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={locationRequiredOpen}
+        onOpenChange={(open) => {
+          if (!open && !requiredHometown.trim()) return;
+          setLocationRequiredOpen(open);
+        }}
+      >
+        <DialogContent
+          className="w-[calc(100vw-24px)] max-w-md rounded-2xl"
+          onInteractOutside={(event) => {
+            if (!requiredHometown.trim()) {
+              event.preventDefault();
+            }
+          }}
+          onEscapeKeyDown={(event) => {
+            if (!requiredHometown.trim()) {
+              event.preventDefault();
+            }
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Cập nhật thông tin cư trú</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Bạn cần nhập <span className="font-semibold text-foreground">quê quán</span> để tiếp tục dùng trang cá nhân.
+              Mục <span className="font-semibold text-foreground">nơi sống hiện tại</span> có thể để trống.
+            </p>
+            <div className="space-y-2">
+              <label htmlFor="required-hometown" className="text-sm font-medium">
+                Quê quán <span className="text-destructive">*</span>
+              </label>
+              <Input
+                id="required-hometown"
+                value={requiredHometown}
+                onChange={(event) => setRequiredHometown(event.target.value)}
+                placeholder="Ví dụ: Sơn La"
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="required-current-city" className="text-sm font-medium">
+                Nơi sống hiện tại (có thể bỏ trống)
+              </label>
+              <Input
+                id="required-current-city"
+                value={requiredCurrentCity}
+                onChange={(event) => setRequiredCurrentCity(event.target.value)}
+                placeholder="Ví dụ: Bản X, xã Y, huyện Z"
+              />
+            </div>
+            <Button
+              type="button"
+              className="w-full"
+              onClick={handleSaveRequiredLocation}
+              disabled={savingRequiredLocation}
+            >
+              {savingRequiredLocation ? "Đang lưu..." : "Lưu thông tin"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </main>
