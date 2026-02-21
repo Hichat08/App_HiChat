@@ -1879,6 +1879,9 @@ const FeedView = () => {
               <DropdownMenuItem onClick={() => navigate("/settings")}>
                 Cài đặt
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/archive")}>
+                Kho lưu trữ
+              </DropdownMenuItem>
               <DropdownMenuItem className="cursor-pointer" variant="destructive">
                 <Logout />
               </DropdownMenuItem>

@@ -12,6 +12,7 @@ import FriendSuggestionsPage from "./pages/FriendSuggestionsPage";
 import UserProfilePage from "./pages/UserProfilePage";
 import PostsPage from "./pages/PostsPage";
 import SettingsPage from "./pages/SettingsPage";
+import ArchivePage from "./pages/ArchivePage";
 
 function App() {
   const { isDark, setTheme } = useThemeStore();
@@ -47,6 +48,7 @@ function App() {
             <Route path="/suggestions" element={<FriendSuggestionsPage />} />
             <Route path="/profile" element={<UserProfilePage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/archive" element={<ArchivePage />} />
             <Route path="/users/:userId" element={<UserProfilePage />} />
           </Route>
         </Routes>
