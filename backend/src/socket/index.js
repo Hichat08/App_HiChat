@@ -112,6 +112,7 @@ io.on("connection", async (socket) => {
         _id: user._id.toString(),
         displayName: user.displayName,
         avatarUrl: user.avatarUrl ?? null,
+        isVerified: !!user.isVerified,
       },
     });
   });

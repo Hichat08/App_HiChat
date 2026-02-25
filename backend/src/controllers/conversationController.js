@@ -220,6 +220,7 @@ export const createConversation = async (req, res) => {
       _id: p.userId?._id,
       displayName: p.userId?.displayName,
       avatarUrl: p.userId?.avatarUrl ?? null,
+      isVerified: !!p.userId?.isVerified,
       joinedAt: p.joinedAt,
       isLocked: !!p.userId?.isLocked,
       lockReason: p.userId?.lockReason || "",
@@ -433,6 +434,7 @@ export const getConversations = async (req, res) => {
         _id: p.userId?._id,
         displayName: p.userId?.displayName,
         avatarUrl: p.userId?.avatarUrl ?? null,
+        isVerified: !!p.userId?.isVerified,
         joinedAt: p.joinedAt,
         isLocked: !!p.userId?.isLocked,
         lockReason: p.userId?.lockReason || "",
@@ -819,7 +821,7 @@ export const clearConversationMessages = async (req, res) => {
     await conversation.save();
 
     await conversation.populate([
-      { path: "participants.userId", select: "displayName avatarUrl" },
+      { path: "participants.userId", select: "displayName avatarUrl isVerified" },
       { path: "seenBy", select: "displayName avatarUrl" },
       { path: "lastMessage.senderId", select: "displayName avatarUrl" },
     ]);
@@ -828,6 +830,7 @@ export const clearConversationMessages = async (req, res) => {
       _id: p.userId?._id,
       displayName: p.userId?.displayName,
       avatarUrl: p.userId?.avatarUrl ?? null,
+      isVerified: !!p.userId?.isVerified,
       joinedAt: p.joinedAt,
     }));
     const nickname = getGroupNickname(conversation.nicknames, userId);
@@ -1550,7 +1553,7 @@ export const addGroupMembers = async (req, res) => {
     await conversation.save();
 
     await conversation.populate([
-      { path: "participants.userId", select: "displayName avatarUrl" },
+      { path: "participants.userId", select: "displayName avatarUrl isVerified" },
       { path: "seenBy", select: "displayName avatarUrl" },
       { path: "lastMessage.senderId", select: "displayName avatarUrl" },
     ]);
@@ -1559,6 +1562,7 @@ export const addGroupMembers = async (req, res) => {
       _id: p.userId?._id,
       displayName: p.userId?.displayName,
       avatarUrl: p.userId?.avatarUrl ?? null,
+      isVerified: !!p.userId?.isVerified,
       joinedAt: p.joinedAt,
     }));
     const nickname = getGroupNickname(conversation.nicknames, userId);
@@ -1627,7 +1631,7 @@ export const updateGroupAvatar = async (req, res) => {
     await conversation.save();
 
     await conversation.populate([
-      { path: "participants.userId", select: "displayName avatarUrl" },
+      { path: "participants.userId", select: "displayName avatarUrl isVerified" },
       { path: "seenBy", select: "displayName avatarUrl" },
       { path: "lastMessage.senderId", select: "displayName avatarUrl" },
     ]);
@@ -1636,6 +1640,7 @@ export const updateGroupAvatar = async (req, res) => {
       _id: p.userId?._id,
       displayName: p.userId?.displayName,
       avatarUrl: p.userId?.avatarUrl ?? null,
+      isVerified: !!p.userId?.isVerified,
       joinedAt: p.joinedAt,
     }));
     const nickname = getGroupNickname(conversation.nicknames, userId);
@@ -1693,7 +1698,7 @@ export const updateGroupName = async (req, res) => {
     await conversation.save();
 
     await conversation.populate([
-      { path: "participants.userId", select: "displayName avatarUrl" },
+      { path: "participants.userId", select: "displayName avatarUrl isVerified" },
       { path: "seenBy", select: "displayName avatarUrl" },
       { path: "lastMessage.senderId", select: "displayName avatarUrl" },
     ]);
@@ -1702,6 +1707,7 @@ export const updateGroupName = async (req, res) => {
       _id: p.userId?._id,
       displayName: p.userId?.displayName,
       avatarUrl: p.userId?.avatarUrl ?? null,
+      isVerified: !!p.userId?.isVerified,
       joinedAt: p.joinedAt,
     }));
     const nickname = getGroupNickname(conversation.nicknames, userId);
@@ -1779,7 +1785,7 @@ export const leaveGroup = async (req, res) => {
     await conversation.save();
 
     await conversation.populate([
-      { path: "participants.userId", select: "displayName avatarUrl" },
+      { path: "participants.userId", select: "displayName avatarUrl isVerified" },
       { path: "seenBy", select: "displayName avatarUrl" },
       { path: "lastMessage.senderId", select: "displayName avatarUrl" },
     ]);
@@ -1788,6 +1794,7 @@ export const leaveGroup = async (req, res) => {
       _id: p.userId?._id,
       displayName: p.userId?.displayName,
       avatarUrl: p.userId?.avatarUrl ?? null,
+      isVerified: !!p.userId?.isVerified,
       joinedAt: p.joinedAt,
     }));
 

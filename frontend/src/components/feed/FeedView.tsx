@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import Logout from "../auth/Logout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import VerifiedBadge from "@/components/ui/verified-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import type { RelationshipRequest, User } from "@/types/user";
@@ -2815,11 +2816,12 @@ const FeedView = () => {
                         <div>
                           <CardTitle
                             className={cn(
-                              "leading-none hover:underline",
+                              "flex items-center gap-2 leading-none hover:underline",
                               isFriendPostAuthor ? "text-base sm:text-lg" : "text-lg sm:text-xl"
                             )}
                           >
                             {post.author.displayName}
+                            {post.author.isVerified ? <VerifiedBadge className="h-3.5 w-3.5" /> : null}
                           </CardTitle>
                           <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
                             <span>{formatPostAgo(post.createdAt)}</span>
@@ -2914,8 +2916,11 @@ const FeedView = () => {
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <p className="text-sm sm:text-base font-semibold leading-none hover:underline">
+                            <p className="flex items-center gap-2 text-sm font-semibold leading-none hover:underline sm:text-base">
                               {post.sharedPost.author.displayName}
+                              {post.sharedPost.author.isVerified ? (
+                                <VerifiedBadge className="h-3.5 w-3.5" />
+                              ) : null}
                             </p>
                             <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
                               <span>{formatPostAgo(post.sharedPost.createdAt)}</span>
