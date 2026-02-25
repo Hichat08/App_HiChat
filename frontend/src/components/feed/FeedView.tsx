@@ -2952,7 +2952,7 @@ const FeedView = () => {
                                   <img
                                     src={item.url}
                                     alt="shared-post-media"
-                                    className="max-h-[520px] w-full object-contain bg-muted/20"
+                                    className="mx-auto h-auto max-h-[520px] max-w-full object-contain bg-muted/20"
                                   />
                                 ) : (
                                   <video
@@ -2981,7 +2981,11 @@ const FeedView = () => {
                       {(post.media || []).map((item, index) => (
                         <div key={`${post._id}-${item.url}-${index}`} className="overflow-hidden bg-muted/20">
                           {item.type === "image" ? (
-                            <img src={item.url} alt="post-media" className="max-h-[520px] w-full object-contain bg-muted/20" />
+                            <img
+                              src={item.url}
+                              alt="post-media"
+                              className="mx-auto h-auto max-h-[520px] max-w-full object-contain bg-muted/20"
+                            />
                           ) : (
                             <video
                               ref={createFeedVideoRef(`post-${post._id}-${index}`)}

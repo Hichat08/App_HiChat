@@ -1392,7 +1392,7 @@ const UserProfilePage = () => {
                                                   <img
                                                     src={item.url}
                                                     alt="shared-post-media"
-                                                    className="max-h-[320px] w-full object-contain bg-muted/20"
+                                                    className="mx-auto h-auto max-h-[320px] max-w-full object-contain bg-muted/20"
                                                   />
                                                 ) : (
                                                   <video
@@ -1421,7 +1421,7 @@ const UserProfilePage = () => {
                                           <img
                                             src={item.url}
                                             alt="post-media"
-                                            className="max-h-[340px] w-full object-contain bg-muted/20"
+                                            className="mx-auto h-auto max-h-[340px] max-w-full object-contain bg-muted/20"
                                           />
                                         ) : (
                                           <video
