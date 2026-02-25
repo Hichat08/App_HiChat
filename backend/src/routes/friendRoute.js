@@ -8,6 +8,7 @@ import {
   getFriendRequests,
   getFriendSuggestions,
   removeFriend,
+  voteFriendLockIncident,
 } from "../controllers/friendController.js";
 
 const router = express.Router();
@@ -21,5 +22,6 @@ router.get("/", getAllFriends);
 router.get("/requests", getFriendRequests);
 router.get("/suggestions", getFriendSuggestions);
 router.delete("/:friendId", removeFriend);
+router.post("/lock-votes", voteFriendLockIncident);
 
 export default router;

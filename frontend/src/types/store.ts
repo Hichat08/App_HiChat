@@ -31,6 +31,13 @@ export interface ThemeState {
   setTheme: (dark: boolean) => void;
 }
 
+export interface ChatAppearanceState {
+  chatPaletteId: string;
+  quickReaction: string;
+  setChatPaletteId: (paletteId: string) => void;
+  setQuickReaction: (reaction: string) => void;
+}
+
 export interface ChatState {
   conversations: Conversation[];
   messages: Record<
@@ -93,6 +100,20 @@ export interface ChatState {
   applyConversationCleared: (conversation: Conversation) => void;
   toggleBlockConversationUser: (conversationId: string) => Promise<boolean>;
   toggleRestrictConversationUser: (conversationId: string) => Promise<boolean>;
+  updateConversationTheme: (conversationId: string, themeId: string) => Promise<void>;
+  updateConversationNickname: (
+    conversationId: string,
+    targetUserId: string,
+    nickname: string
+  ) => Promise<void>;
+  updateConversationMute: (conversationId: string, muted: boolean) => Promise<void>;
+  updateConversationReadReceipt: (
+    conversationId: string,
+    enabled: boolean
+  ) => Promise<void>;
+  updateConversationArchive: (conversationId: string, archived: boolean) => Promise<void>;
+  updateConversationE2EE: (conversationId: string, enabled: boolean) => Promise<void>;
+  reportConversation: (conversationId: string, reason: string, detail?: string) => Promise<void>;
 }
 
 export interface SocketState {

@@ -9,24 +9,21 @@ import UnreadCountBadge from "./UnreadCountBadge";
 import { useSocketStore } from "@/stores/useSocketStore";
 import { useNavigate } from "react-router";
 import StreakBadge from "./StreakBadge";
+import VerifiedBadge from "@/components/ui/verified-badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Ban,
-  BellOff,
-  CircleUserRound,
-  EyeOff,
-  MoreHorizontal,
-  Trash2,
-} from "lucide-react";
+import { Archive, Ban, EyeOff, MessageCircle, MoreHorizontal, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
+const DirectMessageCard = ({
+  convo,
+}: {
+  convo: Conversation;
+}) => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const {
@@ -34,10 +31,10 @@ const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
     setActiveConversation,
     messages,
     fetchMessages,
-    updateConversation,
     clearConversationMessages,
     toggleBlockConversationUser,
     toggleRestrictConversationUser,
+    updateConversationArchive,
   } = useChatStore();
   const { onlineUsers } = useSocketStore();
 
@@ -45,6 +42,13 @@ const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
 
   const otherUser = convo.participants.find((p) => p._id !== user._id);
   if (!otherUser) return null;
+  const displayName = convo.nickname || otherUser.displayName || "";
+  const displayNameNode = (
+    <span className="inline-flex items-center gap-1">
+      {displayName}
+      {otherUser.isVerified ? <VerifiedBadge className="h-3.5 w-3.5" /> : null}
+    </span>
+  );
 
   const unreadCount = convo.unreadCounts[user._id];
   const pendingStatus = convo.directRequest?.status;
@@ -68,19 +72,6 @@ const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
       await fetchMessages(id);
     }
     navigate("/messages");
-  };
-
-  const handleMarkAsUnread = () => {
-    if (!user?._id) return;
-    const unread = convo.unreadCounts?.[user._id] ?? 0;
-    updateConversation({
-      _id: convo._id,
-      unreadCounts: {
-        ...convo.unreadCounts,
-        [user._id]: unread > 0 ? unread : 1,
-      },
-    });
-    toast.success("Đã đánh dấu là chưa đọc");
   };
 
   const handleClearConversation = async () => {
@@ -118,18 +109,42 @@ const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
     }
   };
 
+  const handleArchiveConversation = async () => {
+    try {
+      const nextArchived = !(convo.archived ?? false);
+      await updateConversationArchive(convo._id, nextArchived);
+      toast.success(nextArchived ? "Đã lưu trữ đoạn chat" : "Đã bỏ lưu trữ");
+    } catch (error) {
+      console.error("Lỗi khi lưu trữ đoạn chat", error);
+      toast.error("Không thể lưu trữ đoạn chat");
+    }
+  };
+
   return (
     <ChatCard
       convoId={convo._id}
-      name={otherUser.displayName ?? ""}
+      name={displayNameNode}
       nameRight={
-        convo.streakCount && convo.streakCount > 0 ? (
-          <StreakBadge
-            count={convo.streakCount}
-            atRisk={!!convo.streakAtRisk}
-            recoveryMode={convo.streakRecoveryMode ?? null}
-          />
-        ) : null
+        convo.streakCount && convo.streakCount > 0
+          ? (
+              <StreakBadge
+                count={convo.streakCount}
+                atRisk={!!convo.streakAtRisk}
+                recoveryMode={convo.streakRecoveryMode ?? null}
+                modeType={convo.streakMode?.type ?? null}
+              />
+            )
+          : convo.streakMode?.status && convo.streakMode.status !== "none"
+            ? (
+                <StreakBadge
+                  count={convo.streakCount ?? 0}
+                  atRisk={!!convo.streakAtRisk}
+                  recoveryMode={convo.streakRecoveryMode ?? null}
+                  modeType={convo.streakMode?.type ?? null}
+                  forceVisible
+                />
+              )
+            : null
       }
       timestamp={
         convo.lastMessage?.createdAt
@@ -140,23 +155,21 @@ const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
       onSelect={handleSelectConversation}
       unreadCount={unreadCount}
       leftSection={
-        <>
-          <div className="relative">
-            <UserAvatar
-              type="sidebar"
-              name={otherUser.displayName ?? ""}
-              avatarUrl={otherUser.avatarUrl ?? undefined}
-            />
-            <StatusBadge
-              status={
-                onlineUsers.includes(otherUser?._id ?? "")
-                  ? "online"
-                  : "offline"
-              }
-            />
-            {unreadCount > 0 && <UnreadCountBadge unreadCount={unreadCount} />}
-          </div>
-        </>
+        <div className="relative">
+          <UserAvatar
+            type="sidebar"
+            name={displayName}
+            avatarUrl={otherUser.avatarUrl ?? undefined}
+          />
+          <StatusBadge
+            status={
+              onlineUsers.includes(otherUser?._id ?? "")
+                ? "online"
+                : "offline"
+            }
+          />
+          {unreadCount > 0 && <UnreadCountBadge unreadCount={unreadCount} />}
+        </div>
       }
       subtitle={
         <p
@@ -183,48 +196,22 @@ const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
             <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                handleMarkAsUnread();
-              }}
-            >
-              Đánh dấu là chưa đọc
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                handleSelectConversation(convo._id);
-              }}
-            >
-              Mở phần nhắn tin
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                toast.info("Đã tắt thông báo cuộc trò chuyện");
-              }}
-            >
-              <BellOff className="mr-2 size-4" />
-              Tắt thông báo
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                navigate(`/users/${otherUser._id}`);
-              }}
-            >
-              <CircleUserRound className="mr-2 size-4" />
-              Xem trang cá nhân
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
               onClick={async (e) => {
                 e.stopPropagation();
-                await handleToggleBlock();
+                await handleSelectConversation(convo._id);
               }}
             >
-              <Ban className="mr-2 size-4" />
-              {convo.blockedByMe ? "Bỏ chặn" : "Chặn"}
+              <MessageCircle className="mr-2 size-4" />
+              Vào phần nhắn tin
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                handleArchiveConversation();
+              }}
+            >
+              <Archive className="mr-2 size-4" />
+              {convo.archived ? "Bỏ lưu trữ" : "Lưu trữ đoạn chat"}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={async (e) => {
@@ -234,6 +221,15 @@ const DirectMessageCard = ({ convo }: { convo: Conversation }) => {
             >
               <EyeOff className="mr-2 size-4" />
               {convo.restrictedByMe ? "Bỏ hạn chế" : "Hạn chế"}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={async (e) => {
+                e.stopPropagation();
+                await handleToggleBlock();
+              }}
+            >
+              <Ban className="mr-2 size-4" />
+              {convo.blockedByMe ? "Bỏ chặn" : "Chặn"}
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"

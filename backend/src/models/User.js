@@ -95,6 +95,14 @@ const userSchema = new mongoose.Schema(
         type: Boolean,
         default: true,
       },
+      callSoundEnabled: {
+        type: Boolean,
+        default: true,
+      },
+      messageSoundEnabled: {
+        type: Boolean,
+        default: true,
+      },
       friendRequestAlerts: {
         type: Boolean,
         default: true,
@@ -107,6 +115,61 @@ const userSchema = new mongoose.Schema(
     showOnlineStatus: {
       type: Boolean,
       default: true,
+    },
+    role: {
+      type: String,
+      enum: ["user", "admin"],
+      default: "user",
+    },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    verifiedAt: {
+      type: Date,
+      default: null,
+    },
+    verificationTier: {
+      type: String,
+      enum: ["none", "basic", "creator", "business"],
+      default: "none",
+    },
+    verificationSource: {
+      type: String,
+      enum: ["none", "id", "subscription", "manual"],
+      default: "none",
+    },
+    isLocked: {
+      type: Boolean,
+      default: false,
+    },
+    lockReason: {
+      type: String,
+      trim: true,
+      maxlength: 300,
+      default: "",
+    },
+    lockedAt: {
+      type: Date,
+      default: null,
+    },
+    warningCount: {
+      type: Number,
+      default: 0,
+    },
+    lastWarningAt: {
+      type: Date,
+      default: null,
+    },
+    lastWarningReason: {
+      type: String,
+      trim: true,
+      maxlength: 300,
+      default: "",
+    },
+    lastLoginAt: {
+      type: Date,
+      default: null,
     },
   },
   {

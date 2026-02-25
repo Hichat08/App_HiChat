@@ -70,6 +70,12 @@ const postSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    status: {
+      type: String,
+      enum: ["active", "hidden", "deleted"],
+      default: "active",
+      index: true,
+    },
   },
   {
     timestamps: true,

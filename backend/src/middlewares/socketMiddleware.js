@@ -19,6 +19,10 @@ export const socketAuthMiddleware = async (socket, next) => {
       return next(new Error("User không tồn tại"));
     }
 
+    if (user.isLocked) {
+      return next(new Error("Unauthorized - Tài khoản đã bị khóa"));
+    }
+
     socket.user = user;
 
     next();

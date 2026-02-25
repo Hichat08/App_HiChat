@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import { connectDB } from "./libs/db.js";
 import authRoute from "./routes/authRoute.js";
 import userRoute from "./routes/userRoute.js";
+import supportRoute from "./routes/supportRoute.js";
 import friendRoute from "./routes/friendRoute.js";
 import messageRoute from "./routes/messageRoute.js";
 import conversationRoute from "./routes/conversationRoute.js";
@@ -62,6 +63,7 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // public routes
 app.use("/api/auth", authRoute);
+app.use("/api/users/support", supportRoute);
 
 // private routes
 app.use(protectedRoute);

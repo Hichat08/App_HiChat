@@ -77,12 +77,14 @@ export const useSocketStore = create<SocketState>((set, get) => ({
 
       const isOwnMessage = message.senderId === user?._id;
       const messageAlertsEnabled = user?.notificationSettings?.messageAlerts ?? true;
+      const isMuted = existingConversation?.muted ?? false;
+      const messageSoundEnabled = user?.notificationSettings?.messageSoundEnabled ?? true;
 
       if (!existingConversation) {
         chatState.fetchConversations();
       }
 
-      if (!isOwnMessage && messageAlertsEnabled) {
+      if (!isOwnMessage && messageAlertsEnabled && !isMuted) {
         const isActiveConversation = chatState.activeConversationId === message.conversationId;
         const isPageVisible =
           typeof document !== "undefined" ? document.visibilityState === "visible" : false;
@@ -120,6 +122,31 @@ export const useSocketStore = create<SocketState>((set, get) => ({
               },
             },
           });
+        }
+      }
+
+      if (!isOwnMessage && !isMuted && messageSoundEnabled) {
+        try {
+          if (typeof window !== "undefined") {
+            const AudioContextImpl = window.AudioContext || (window as any).webkitAudioContext;
+            if (AudioContextImpl) {
+              const ctx = new AudioContextImpl();
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.type = "sine";
+              osc.frequency.setValueAtTime(680, ctx.currentTime);
+              gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+              gain.gain.exponentialRampToValueAtTime(0.06, ctx.currentTime + 0.02);
+              gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.start();
+              osc.stop(ctx.currentTime + 0.2);
+              osc.onended = () => ctx.close();
+            }
+          }
+        } catch {
+          // ignore sound errors
         }
       }
 
@@ -183,7 +210,27 @@ export const useSocketStore = create<SocketState>((set, get) => ({
       useChatStore.getState().updateConversation(conversation);
     });
 
+    socket.on("conversation-theme-updated", ({ conversationId, directThemeId }) => {
+      if (!conversationId || !directThemeId) return;
+      useChatStore.getState().updateConversation({
+        _id: conversationId,
+        directThemeId,
+      });
+    });
+
+    socket.on("conversation-e2ee-updated", ({ conversationId, e2eeActive }) => {
+      if (!conversationId) return;
+      useChatStore.getState().updateConversation({
+        _id: conversationId,
+        e2eeActive: !!e2eeActive,
+      });
+    });
+
     socket.on("direct-request-updated", (payload) => {
+      useChatStore.getState().updateConversation(payload);
+    });
+
+    socket.on("direct-streak-mode-updated", (payload) => {
       useChatStore.getState().updateConversation(payload);
     });
 
@@ -375,6 +422,77 @@ export const useSocketStore = create<SocketState>((set, get) => ({
         createdAt,
       });
     });
+
+    socket.on("admin-report:new", ({ reportId, reporter, target, reason, detail, createdAt }) => {
+      const { user } = useAuthStore.getState();
+      const securityAlertsEnabled = user?.notificationSettings?.securityAlerts ?? true;
+
+      const reporterName = reporter?.displayName ?? "Một người dùng";
+      const targetName = target?.displayName ?? "một người dùng";
+      const title = `Báo cáo mới từ ${reporterName}`;
+      const description = `${targetName}: ${reason || "Báo cáo vi phạm"}`;
+
+      useNotificationStore.getState().addNotification({
+        id: reportId ?? `admin-report-${Date.now()}`,
+        type: "activity",
+        title,
+        description: detail ? `${description} • ${detail}` : description,
+        avatarUrl: reporter?.avatarUrl ?? null,
+        createdAt,
+      });
+
+      if (securityAlertsEnabled) {
+        toast.warning(title, {
+          description: detail ? `${description} • ${detail}` : description,
+        });
+      }
+    });
+
+    socket.on(
+      "admin-notification",
+      ({ type, title, description, createdAt, isLocked, lockReason, lockedAt }) => {
+        const { user, setUser } = useAuthStore.getState();
+        const securityAlertsEnabled = user?.notificationSettings?.securityAlerts ?? true;
+
+        const fallbackTitle =
+          type === "lock"
+            ? "Tài khoản đã bị khóa"
+            : type === "unlock"
+              ? "Tài khoản đã mở khóa"
+              : "Cảnh báo từ quản trị viên";
+
+        const safeTitle = title || fallbackTitle;
+        const safeDescription = description || "Bạn có thông báo mới từ quản trị viên.";
+
+        useNotificationStore.getState().addNotification({
+          id: `admin-${type}-${createdAt || Date.now()}`,
+          type: "activity",
+          title: safeTitle,
+          description: safeDescription,
+          createdAt,
+        });
+
+        if (typeof isLocked === "boolean") {
+          if (user) {
+            setUser({
+              ...user,
+              isLocked,
+              lockReason: isLocked ? lockReason || safeDescription : "",
+              lockedAt: isLocked ? lockedAt || createdAt || null : null,
+            });
+          }
+        }
+
+        if (type === "lock" || type === "unlock") {
+          toast.warning(safeTitle, { description: safeDescription, duration: 15000 });
+          return;
+        }
+
+        if (securityAlertsEnabled) {
+          toast.warning(safeTitle, { description: safeDescription });
+        }
+      }
+    );
 
     // streak updates (real-time)
     socket.on(

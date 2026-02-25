@@ -21,7 +21,7 @@ export const authService = {
 
   signIn: async (username: string, password: string) => {
     const res = await api.post(
-      "auth/signin",
+      "/auth/signin",
       { username, password },
       { withCredentials: true }
     );
@@ -29,7 +29,7 @@ export const authService = {
   },
 
   signOut: async () => {
-    return api.post("/auth/signout", { withCredentials: true });
+    return api.post("/auth/signout", null, { withCredentials: true });
   },
 
   fetchMe: async () => {
@@ -38,7 +38,7 @@ export const authService = {
   },
 
   refresh: async () => {
-    const res = await api.post("/auth/refresh", { withCredentials: true });
+    const res = await api.post("/auth/refresh", null, { withCredentials: true });
     return res.data.accessToken;
   },
 };

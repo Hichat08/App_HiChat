@@ -5,6 +5,7 @@ import { Badge } from "../ui/badge";
 import { cn } from "@/lib/utils";
 import { useSocketStore } from "@/stores/useSocketStore";
 import AvatarUploader from "./AvatarUploader";
+import VerifiedBadge from "../ui/verified-badge";
 
 interface ProfileCardProps {
   user: User | null;
@@ -37,7 +38,10 @@ const ProfileCard = ({ user }: ProfileCardProps) => {
         {/* user info */}
         <div className="text-center sm:text-left flex-1">
           <h1 className="text-2xl font-semibold tracking-tight text-white">
-            {user.displayName}
+            <span className="inline-flex items-center gap-2">
+              {user.displayName}
+              {user.isVerified ? <VerifiedBadge className="h-4 w-4" /> : null}
+            </span>
           </h1>
 
           {user.bio && (

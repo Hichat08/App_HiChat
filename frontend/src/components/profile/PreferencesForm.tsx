@@ -100,6 +100,7 @@ const PreferencesForm = () => {
             className="data-[state=checked]:bg-primary-glow"
           />
         </div>
+
       </CardContent>
     </Card>
   );

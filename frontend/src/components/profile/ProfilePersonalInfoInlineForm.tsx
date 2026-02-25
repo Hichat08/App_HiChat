@@ -13,18 +13,27 @@ import { friendService } from "@/services/friendService";
 
 type Props = {
   userInfo: User;
+  inDialog?: boolean;
 };
 
-const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
+const ProfilePersonalInfoInlineForm = ({
+  userInfo,
+  inDialog = false,
+}: Props) => {
   const { setUser, user: me } = useAuthStore();
   const [loading, setLoading] = useState(false);
+  const [breakingUp, setBreakingUp] = useState(false);
   const [searchingPartner, setSearchingPartner] = useState(false);
   const [relationshipKeyword, setRelationshipKeyword] = useState("");
   const [relationshipResults, setRelationshipResults] = useState<User[]>([]);
   const [selectedPartner, setSelectedPartner] = useState<User | null>(null);
-  const [receivedRequests, setReceivedRequests] = useState<RelationshipRequest[]>([]);
+  const [receivedRequests, setReceivedRequests] = useState<
+    RelationshipRequest[]
+  >([]);
   const [sentRequests, setSentRequests] = useState<RelationshipRequest[]>([]);
-  const [respondingRequestId, setRespondingRequestId] = useState<string | null>(null);
+  const [respondingRequestId, setRespondingRequestId] = useState<string | null>(
+    null,
+  );
   const [requestingRelationship, setRequestingRelationship] = useState(false);
   const [formState, setFormState] = useState({
     currentCity: "",
@@ -37,7 +46,9 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
     setFormState({
       currentCity: userInfo.currentCity ?? "",
       hometown: userInfo.hometown ?? "",
-      birthday: userInfo.birthday ? new Date(userInfo.birthday).toISOString().slice(0, 10) : "",
+      birthday: userInfo.birthday
+        ? new Date(userInfo.birthday).toISOString().slice(0, 10)
+        : "",
       relationshipStatus: userInfo.relationshipStatus ?? "",
     });
   }, [userInfo]);
@@ -73,9 +84,15 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
     const timer = setTimeout(async () => {
       try {
         setSearchingPartner(true);
-        const found = await friendService.searchUsers(normalizedRelationshipKeyword);
+        const found = await friendService.searchUsers(
+          normalizedRelationshipKeyword,
+        );
         if (!alive) return;
-        setRelationshipResults((found || []).filter((item: User) => item?._id && item._id !== me?._id));
+        setRelationshipResults(
+          (found || []).filter(
+            (item: User) => item?._id && item._id !== me?._id,
+          ),
+        );
       } catch (error) {
         if (!alive) return;
         setRelationshipResults([]);
@@ -88,7 +105,12 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
       alive = false;
       clearTimeout(timer);
     };
-  }, [formState.relationshipStatus, normalizedRelationshipKeyword, userInfo.relationshipPartner, me?._id]);
+  }, [
+    formState.relationshipStatus,
+    normalizedRelationshipKeyword,
+    userInfo.relationshipPartner,
+    me?._id,
+  ]);
 
   const sortedRelationshipResults = useMemo(() => {
     if (!relationshipResults.length) return [];
@@ -102,7 +124,8 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
 
-    const isChoosingRelationship = formState.relationshipStatus === "in_relationship";
+    const isChoosingRelationship =
+      formState.relationshipStatus === "in_relationship";
     const alreadyPartnered = !!userInfo.relationshipPartner?._id;
 
     if (isChoosingRelationship && !alreadyPartnered && !selectedPartner?._id) {
@@ -135,19 +158,26 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
       if (isChoosingRelationship && !alreadyPartnered && selectedPartner?._id) {
         try {
           setRequestingRelationship(true);
-          const result = await userService.sendRelationshipRequest(selectedPartner._id);
+          const result = await userService.sendRelationshipRequest(
+            selectedPartner._id,
+          );
           toast.success(result?.message || "Đã gửi lời mời hẹn hò");
           setRelationshipKeyword("");
           setRelationshipResults([]);
           await loadRelationshipRequests();
         } catch (error: any) {
-          toast.error(error?.response?.data?.message || "Không thể gửi lời mời hẹn hò");
+          toast.error(
+            error?.response?.data?.message || "Không thể gửi lời mời hẹn hò",
+          );
         } finally {
           setRequestingRelationship(false);
         }
       }
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Không thể cập nhật thông tin cá nhân");
+      toast.error(
+        error?.response?.data?.message ||
+          "Không thể cập nhật thông tin cá nhân",
+      );
     } finally {
       setLoading(false);
     }
@@ -156,7 +186,8 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
   const handleAcceptRelationshipRequest = async (requestId: string) => {
     try {
       setRespondingRequestId(requestId);
-      const { user, message } = await userService.acceptRelationshipRequest(requestId);
+      const { user, message } =
+        await userService.acceptRelationshipRequest(requestId);
       if (user) {
         setUser(user);
       }
@@ -176,17 +207,49 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
       toast.success(result?.message || "Đã từ chối lời mời hẹn hò");
       await loadRelationshipRequests();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Không thể từ chối lời mời");
+      toast.error(
+        error?.response?.data?.message || "Không thể từ chối lời mời",
+      );
     } finally {
       setRespondingRequestId(null);
     }
   };
 
+  const handleBreakup = async () => {
+    if (!userInfo.relationshipPartner?._id) return;
+    const confirmed = window.confirm(
+      `Bạn muốn huỷ cặp đôi với ${userInfo.relationshipPartner.displayName}?`,
+    );
+    if (!confirmed) return;
+
+    try {
+      setBreakingUp(true);
+      const { user, message } = await userService.updateProfile({
+        relationshipStatus: "single",
+      });
+      if (me?._id && user?._id && me._id === user._id) {
+        setUser(user);
+      }
+      setFormState((prev) => ({ ...prev, relationshipStatus: "single" }));
+      setSelectedPartner(null);
+      setRelationshipKeyword("");
+      setRelationshipResults([]);
+      toast.success(message || "Đã huỷ cặp đôi");
+      await loadRelationshipRequests();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Không thể huỷ cặp đôi");
+    } finally {
+      setBreakingUp(false);
+    }
+  };
+
   return (
-    <Card className="border-border/30">
-      <CardHeader>
-        <CardTitle>Sửa thông tin cá nhân</CardTitle>
-      </CardHeader>
+    <Card className={inDialog ? "border-0 shadow-none" : "border-border/30"}>
+      {!inDialog && (
+        <CardHeader>
+          <CardTitle>Sửa thông tin cá nhân</CardTitle>
+        </CardHeader>
+      )}
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
@@ -196,7 +259,10 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
                 id="profile-current-city"
                 value={formState.currentCity}
                 onChange={(event) =>
-                  setFormState((prev) => ({ ...prev, currentCity: event.target.value }))
+                  setFormState((prev) => ({
+                    ...prev,
+                    currentCity: event.target.value,
+                  }))
                 }
                 placeholder="Ví dụ: Sơn La"
               />
@@ -207,7 +273,10 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
                 id="profile-hometown"
                 value={formState.hometown}
                 onChange={(event) =>
-                  setFormState((prev) => ({ ...prev, hometown: event.target.value }))
+                  setFormState((prev) => ({
+                    ...prev,
+                    hometown: event.target.value,
+                  }))
                 }
                 placeholder="Ví dụ: Mường La, Sơn La, Việt Nam"
               />
@@ -219,7 +288,10 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
                 type="date"
                 value={formState.birthday}
                 onChange={(event) =>
-                  setFormState((prev) => ({ ...prev, birthday: event.target.value }))
+                  setFormState((prev) => ({
+                    ...prev,
+                    birthday: event.target.value,
+                  }))
                 }
               />
             </div>
@@ -231,7 +303,11 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
                 onChange={(event) =>
                   setFormState((prev) => ({
                     ...prev,
-                    relationshipStatus: event.target.value as "" | "single" | "in_relationship" | "married",
+                    relationshipStatus: event.target.value as
+                      | ""
+                      | "single"
+                      | "in_relationship"
+                      | "married",
                   }))
                 }
                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
@@ -254,7 +330,11 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
               </div>
               {userInfo.relationshipPartner ? (
                 <div className="rounded-lg border bg-muted/30 p-3 text-sm">
-                  Bạn đang hẹn hò với <span className="font-semibold">{userInfo.relationshipPartner.displayName}</span>.
+                  Bạn đang hẹn hò với{" "}
+                  <span className="font-semibold">
+                    {userInfo.relationshipPartner.displayName}
+                  </span>
+                  .
                 </div>
               ) : (
                 <>
@@ -264,14 +344,19 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
                       className="pl-9"
                       placeholder="Ví dụ: Nguyễn Văn A hoặc @username"
                       value={relationshipKeyword}
-                      onChange={(event) => setRelationshipKeyword(event.target.value)}
+                      onChange={(event) =>
+                        setRelationshipKeyword(event.target.value)
+                      }
                     />
                   </div>
 
                   {selectedPartner && (
                     <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-sm">
                       <span>
-                        Đã chọn: <span className="font-semibold">{selectedPartner.displayName}</span>
+                        Đã chọn:{" "}
+                        <span className="font-semibold">
+                          {selectedPartner.displayName}
+                        </span>
                       </span>
                       <Button
                         type="button"
@@ -287,16 +372,26 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
                   )}
 
                   {searchingPartner && (
-                    <p className="text-xs text-muted-foreground">Đang tìm người dùng...</p>
+                    <p className="text-xs text-muted-foreground">
+                      Đang tìm người dùng...
+                    </p>
                   )}
 
-                  {!searchingPartner && normalizedRelationshipKeyword.length > 0 && normalizedRelationshipKeyword.length < 2 && (
-                    <p className="text-xs text-muted-foreground">Vui lòng nhập ít nhất 2 ký tự để bắt đầu tìm kiếm.</p>
-                  )}
+                  {!searchingPartner &&
+                    normalizedRelationshipKeyword.length > 0 &&
+                    normalizedRelationshipKeyword.length < 2 && (
+                      <p className="text-xs text-muted-foreground">
+                        Vui lòng nhập ít nhất 2 ký tự để bắt đầu tìm kiếm.
+                      </p>
+                    )}
 
-                  {!searchingPartner && normalizedRelationshipKeyword.length >= 2 && sortedRelationshipResults.length === 0 && (
-                    <p className="text-xs text-muted-foreground">Không tìm thấy người phù hợp.</p>
-                  )}
+                  {!searchingPartner &&
+                    normalizedRelationshipKeyword.length >= 2 &&
+                    sortedRelationshipResults.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Không tìm thấy người phù hợp.
+                      </p>
+                    )}
 
                   {sortedRelationshipResults.length > 0 && (
                     <div className="max-h-52 space-y-1 overflow-auto rounded-md border bg-background p-1">
@@ -310,14 +405,25 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
                             onClick={() => setSelectedPartner(user)}
                           >
                             <Avatar className="h-7 w-7">
-                              <AvatarImage src={user.avatarUrl ?? undefined} alt={user.displayName} />
-                              <AvatarFallback>{user.displayName?.charAt(0) || "U"}</AvatarFallback>
+                              <AvatarImage
+                                src={user.avatarUrl ?? undefined}
+                                alt={user.displayName}
+                              />
+                              <AvatarFallback>
+                                {user.displayName?.charAt(0) || "U"}
+                              </AvatarFallback>
                             </Avatar>
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium">{user.displayName}</p>
-                              <p className="truncate text-xs text-muted-foreground">@{user.username}</p>
+                              <p className="truncate text-sm font-medium">
+                                {user.displayName}
+                              </p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                @{user.username}
+                              </p>
                             </div>
-                            {isSelected && <Check className="size-4 text-primary" />}
+                            {isSelected && (
+                              <Check className="size-4 text-primary" />
+                            )}
                           </button>
                         );
                       })}
@@ -327,6 +433,138 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
               )}
             </div>
           )}
+
+          <div className="space-y-3 rounded-xl border bg-muted/15 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="profile-relationship">Tình trạng hiện tại</Label>
+              <span className="rounded-full bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                {formState.relationshipStatus === "in_relationship"
+                  ? "Đang hẹn hò"
+                  : formState.relationshipStatus === "married"
+                    ? "Đã kết hôn"
+                    : formState.relationshipStatus === "single"
+                      ? "Độc thân"
+                      : "Chưa cập nhật"}
+              </span>
+            </div>
+
+            {formState.relationshipStatus === "in_relationship" && (
+              <div className="space-y-3 rounded-lg border bg-background p-3">
+                {userInfo.relationshipPartner ? (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage
+                          src={
+                            userInfo.relationshipPartner.avatarUrl ?? undefined
+                          }
+                          alt={userInfo.relationshipPartner.displayName}
+                        />
+                        <AvatarFallback>
+                          {userInfo.relationshipPartner.displayName?.charAt(
+                            0,
+                          ) || "U"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">
+                          Bạn đang hẹn hò với{" "}
+                          {userInfo.relationshipPartner.displayName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Bạn có thể huỷ cặp đôi bất kỳ lúc nào.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={handleBreakup}
+                        disabled={
+                          loading || requestingRelationship || breakingUp
+                        }
+                      >
+                        {breakingUp ? "Đang huỷ..." : "Huỷ cặp đôi"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() =>
+                          setFormState((prev) => ({
+                            ...prev,
+                            relationshipStatus: "single",
+                          }))
+                        }
+                        disabled={
+                          loading || requestingRelationship || breakingUp
+                        }
+                      >
+                        Chuyển sang Độc thân rồi lưu
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Label>Chọn người muốn hẹn hò</Label>
+                    <Input
+                      placeholder="Nhập tên hiển thị hoặc username..."
+                      value={relationshipKeyword}
+                      onChange={(event) =>
+                        setRelationshipKeyword(event.target.value)
+                      }
+                    />
+
+                    {selectedPartner && (
+                      <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                        Đã chọn:{" "}
+                        <span className="font-medium">
+                          {selectedPartner.displayName}
+                        </span>
+                      </div>
+                    )}
+
+                    {searchingPartner && (
+                      <p className="text-xs text-muted-foreground">
+                        Đang tìm người dùng...
+                      </p>
+                    )}
+
+                    {relationshipResults.length > 0 && (
+                      <div className="max-h-48 space-y-1 overflow-auto rounded-md border bg-background p-1">
+                        {relationshipResults.map((user) => (
+                          <button
+                            key={user._id}
+                            type="button"
+                            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-muted/50"
+                            onClick={() => setSelectedPartner(user)}
+                          >
+                            <Avatar className="h-7 w-7">
+                              <AvatarImage
+                                src={user.avatarUrl ?? undefined}
+                                alt={user.displayName}
+                              />
+                              <AvatarFallback>
+                                {user.displayName?.charAt(0) || "U"}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">
+                                {user.displayName}
+                              </p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                @{user.username}
+                              </p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
 
           {receivedRequests.length > 0 && (
             <div className="space-y-2 rounded-xl border p-3">
@@ -338,8 +576,13 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
                     className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-2 py-2"
                   >
                     <div className="text-sm">
-                      <span className="font-medium">{request.from?.displayName || "Người dùng"}</span>
-                      <span className="text-muted-foreground"> muốn hẹn hò với bạn</span>
+                      <span className="font-medium">
+                        {request.from?.displayName || "Người dùng"}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {" "}
+                        muốn hẹn hò với bạn
+                      </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
@@ -347,7 +590,9 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
                         size="sm"
                         variant="outline"
                         disabled={respondingRequestId === request._id}
-                        onClick={() => handleDeclineRelationshipRequest(request._id)}
+                        onClick={() =>
+                          handleDeclineRelationshipRequest(request._id)
+                        }
                       >
                         Từ chối
                       </Button>
@@ -355,7 +600,9 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
                         type="button"
                         size="sm"
                         disabled={respondingRequestId === request._id}
-                        onClick={() => handleAcceptRelationshipRequest(request._id)}
+                        onClick={() =>
+                          handleAcceptRelationshipRequest(request._id)
+                        }
                       >
                         Đồng ý
                       </Button>
@@ -377,8 +624,16 @@ const ProfilePersonalInfoInlineForm = ({ userInfo }: Props) => {
             </div>
           )}
 
-          <Button type="submit" disabled={loading || requestingRelationship}>
-            {loading ? "Đang lưu..." : requestingRelationship ? "Đang gửi lời mời..." : "Lưu thay đổi"}
+          <Button
+            type="submit"
+            disabled={loading || requestingRelationship || breakingUp}
+            className="w-full sm:w-auto bg-gradient-primary hover:opacity-90 transition-opacity"
+          >
+            {loading
+              ? "Đang lưu..."
+              : requestingRelationship
+                ? "Đang gửi lời mời..."
+                : "Lưu thay đổi"}
           </Button>
         </form>
       </CardContent>

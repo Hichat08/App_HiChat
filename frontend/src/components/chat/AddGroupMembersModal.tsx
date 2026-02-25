@@ -20,8 +20,18 @@ import { Label } from "../ui/label";
 import IniviteSuggestionList from "../newGroupChat/IniviteSuggestionList";
 import SelectedUsersList from "../newGroupChat/SelectedUsersList";
 
-const AddGroupMembersModal = ({ chat }: { chat: Conversation }) => {
-  const [open, setOpen] = useState(false);
+const AddGroupMembersModal = ({
+  chat,
+  open,
+  onOpenChange,
+  hideTrigger,
+}: {
+  chat: Conversation;
+  open?: boolean;
+  onOpenChange?: (next: boolean) => void;
+  hideTrigger?: boolean;
+}) => {
+  const [internalOpen, setInternalOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [invitedUsers, setInvitedUsers] = useState<Friend[]>([]);
@@ -36,8 +46,17 @@ const AddGroupMembersModal = ({ chat }: { chat: Conversation }) => {
       !invitedUsers.some((u) => u._id === friend._id)
   );
 
+  const effectiveOpen = typeof open === "boolean" ? open : internalOpen;
+  const setEffectiveOpen = (nextOpen: boolean) => {
+    if (typeof open === "boolean") {
+      onOpenChange?.(nextOpen);
+    } else {
+      setInternalOpen(nextOpen);
+    }
+  };
+
   const handleOpenChange = async (nextOpen: boolean) => {
-    setOpen(nextOpen);
+    setEffectiveOpen(nextOpen);
     if (nextOpen) {
       await getFriends();
     } else {
@@ -86,13 +105,15 @@ const AddGroupMembersModal = ({ chat }: { chat: Conversation }) => {
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="size-8" title="Mời thành viên">
-          <UserPlus className="size-4" />
-          <span className="sr-only">Mời thành viên</span>
-        </Button>
-      </DialogTrigger>
+    <Dialog open={effectiveOpen} onOpenChange={handleOpenChange}>
+      {!hideTrigger && (
+        <DialogTrigger asChild>
+          <Button variant="ghost" size="icon" className="size-8" title="Mời thành viên">
+            <UserPlus className="size-4" />
+            <span className="sr-only">Mời thành viên</span>
+          </Button>
+        </DialogTrigger>
+      )}
 
       <DialogContent className="sm:max-w-[425px] border-none">
         <DialogHeader>

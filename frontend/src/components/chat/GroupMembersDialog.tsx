@@ -15,7 +15,17 @@ import { Badge } from "../ui/badge";
 import { Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const GroupMembersDialog = ({ chat }: { chat: Conversation }) => {
+const GroupMembersDialog = ({
+  chat,
+  open,
+  onOpenChange,
+  hideTrigger,
+}: {
+  chat: Conversation;
+  open?: boolean;
+  onOpenChange?: (next: boolean) => void;
+  hideTrigger?: boolean;
+}) => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const { onlineUsers } = useSocketStore();
@@ -24,14 +34,21 @@ const GroupMembersDialog = ({ chat }: { chat: Conversation }) => {
     navigate(`/users/${participant._id}`);
   };
 
+  const dialogProps =
+    typeof open === "boolean"
+      ? { open, onOpenChange }
+      : {};
+
   return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-8 gap-1 px-2">
-          <Users className="size-4" />
-          <span>{chat.participants.length}</span>
-        </Button>
-      </DialogTrigger>
+    <Dialog {...dialogProps}>
+      {!hideTrigger && (
+        <DialogTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-8 gap-1 px-2">
+            <Users className="size-4" />
+            <span>{chat.participants.length}</span>
+          </Button>
+        </DialogTrigger>
+      )}
 
       <DialogContent className="sm:max-w-[420px]">
         <DialogHeader>

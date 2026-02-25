@@ -3,12 +3,17 @@ export interface Participant {
   displayName: string;
   avatarUrl?: string | null;
   joinedAt: string;
+  isVerified?: boolean;
+  isLocked?: boolean;
+  lockReason?: string;
+  lockedAt?: string | null;
 }
 
 export interface SeenUser {
   _id: string;
   displayName?: string;
   avatarUrl?: string | null;
+  isVerified?: boolean;
 }
 
 export interface Group {
@@ -26,6 +31,7 @@ export interface LastMessage {
     _id: string;
     displayName: string;
     avatarUrl?: string | null;
+    isVerified?: boolean;
   };
 }
 
@@ -48,6 +54,14 @@ export interface Conversation {
   streakExpiresAt?: string | null;
   streakRecoveryMode?: "free" | "minus_one" | null;
   streakLost?: boolean;
+  streakMode?: {
+    type: "love" | "dating" | "friends" | null;
+    status: "none" | "pending" | "active";
+    requestedBy?: string | null;
+    requestedAt?: string | null;
+    acceptedUserIds?: string[];
+    activatedAt?: string | null;
+  };
   directRequest?: {
     status: "none" | "pending" | "accepted" | "rejected";
     requesterId?: string | null;
@@ -60,6 +74,18 @@ export interface Conversation {
   blockedByOther?: boolean;
   restrictedByMe?: boolean;
   restrictedByOther?: boolean;
+  directThemeId?: string;
+  nicknames?: Record<string, string>;
+  nickname?: string;
+  muted?: boolean;
+  archived?: boolean;
+  readReceiptEnabled?: boolean;
+  e2eeEnabled?: boolean;
+  e2eeActive?: boolean;
+  lockIncidentVote?: {
+    hasVoted: boolean;
+    myVote?: "safe" | "suspicious" | null;
+  };
 }
 
 export interface ConversationResponse {

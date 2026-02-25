@@ -61,4 +61,8 @@ export const friendService = {
     const res = await api.get("/friends/suggestions");
     return res.data.suggestions;
   },
+  async voteLockedFriend(targetUserId: string, vote: "safe" | "suspicious") {
+    const res = await api.post("/friends/lock-votes", { targetUserId, vote });
+    return res.data;
+  },
 };

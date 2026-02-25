@@ -8,6 +8,7 @@ import ChatCard from "./ChatCard";
 import DirectMessageCard from "./DirectMessageCard";
 import UserAvatar from "./UserAvatar";
 import StatusBadge from "./StatusBadge";
+import VerifiedBadge from "@/components/ui/verified-badge";
 import type { Conversation } from "@/types/chat";
 
 type DirectMessageListProps = {
@@ -28,14 +29,25 @@ const DirectMessageList = ({ searchQuery = "", unreadOnly = false }: DirectMessa
   }, [getFriends]);
 
   const directConversations = useMemo(
-    () => conversations.filter((convo) => convo.type === "direct"),
+    () => conversations.filter((convo) => convo.type === "direct" && !convo.archived),
     [conversations]
   );
+  const archivedPartnerIds = useMemo(() => {
+    if (!user?._id) return new Set<string>();
+    const set = new Set<string>();
+    conversations.forEach((convo) => {
+      if (convo.type !== "direct" || !convo.archived) return;
+      const other = convo.participants.find((p) => p._id !== user._id);
+      if (other?._id) set.add(other._id);
+    });
+    return set;
+  }, [conversations, user?._id]);
   const normalizedQuery = searchQuery.trim().toLowerCase();
 
   const mergedRows = useMemo(() => {
     if (!user?._id) return [];
 
+    const allDirectConversations = conversations.filter((convo) => convo.type === "direct");
     const sortedConversations = [...directConversations].sort((a, b) => {
       const aTime = new Date(a.lastMessageAt || a.updatedAt || 0).getTime();
       const bTime = new Date(b.lastMessageAt || b.updatedAt || 0).getTime();
@@ -49,10 +61,20 @@ const DirectMessageList = ({ searchQuery = "", unreadOnly = false }: DirectMessa
         directConvoByUserId.set(other._id, convo);
       }
     });
+    const directConvoByUserIdAll = new Map<string, Conversation>();
+    allDirectConversations.forEach((convo) => {
+      const other = convo.participants.find((p) => p._id !== user._id);
+      if (other?._id) {
+        directConvoByUserIdAll.set(other._id, convo);
+      }
+    });
 
     const friendRows = friends
+      .filter((friend) => !archivedPartnerIds.has(friend._id))
       .map((friend) => {
         const convo = directConvoByUserId.get(friend._id);
+        const convoAny = directConvoByUserIdAll.get(friend._id);
+        if (convoAny?.archived) return null;
         return {
           key: convo ? `convo-${convo._id}` : `friend-${friend._id}`,
           type: convo ? ("conversation" as const) : ("friend" as const),
@@ -60,6 +82,7 @@ const DirectMessageList = ({ searchQuery = "", unreadOnly = false }: DirectMessa
           convo: convo ?? null,
         };
       })
+      .filter(Boolean)
       .sort((a, b) => {
         if (a.convo && b.convo) {
           const aTime = new Date(a.convo.lastMessageAt || a.convo.updatedAt || 0).getTime();
@@ -85,13 +108,13 @@ const DirectMessageList = ({ searchQuery = "", unreadOnly = false }: DirectMessa
       }));
 
     return [...friendRows, ...remainingConversationRows];
-  }, [directConversations, friends, user?._id]);
+  }, [conversations, directConversations, friends, user?._id, archivedPartnerIds]);
 
   const visibleRows = useMemo(() => {
     return mergedRows.filter((row) => {
       if (row.type === "conversation" && row.convo) {
         const other = row.convo.participants.find((p) => p._id !== user?._id);
-        const displayName = (other?.displayName || "").toLowerCase();
+        const displayName = ((row.convo.nickname || other?.displayName || "")).toLowerCase();
 
         const unreadCount = user?._id ? row.convo.unreadCounts?.[user._id] ?? 0 : 0;
         const isIncomingRequest =
@@ -128,18 +151,30 @@ const DirectMessageList = ({ searchQuery = "", unreadOnly = false }: DirectMessa
     <div className="flex-1 overflow-y-auto p-2 space-y-2">
       {visibleRows.map((row) => {
         if (row.type === "conversation" && row.convo) {
-          return <DirectMessageCard convo={row.convo} key={row.key} />;
+          return (
+            <DirectMessageCard
+              convo={row.convo}
+              key={row.key}
+            />
+          );
         }
 
         if (!row.friend) return null;
 
         const isOpening = openingFriendId === row.friend._id;
 
+        const nameNode = (
+          <span className="inline-flex items-center gap-1">
+            {row.friend.displayName || row.friend.username}
+            {row.friend.isVerified ? <VerifiedBadge className="h-3.5 w-3.5" /> : null}
+          </span>
+        );
+
         return (
           <ChatCard
             key={row.key}
             convoId={row.friend._id}
-            name={row.friend.displayName || row.friend.username}
+            name={nameNode}
             isActive={false}
             onSelect={() => handleOpenFriendConversation(row.friend._id)}
             leftSection={

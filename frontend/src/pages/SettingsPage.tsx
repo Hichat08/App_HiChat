@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import PreferencesForm from "@/components/profile/PreferencesForm";
 import PrivacySettings from "@/components/profile/PrivacySettings";
@@ -9,7 +9,9 @@ import { useAuthStore } from "@/stores/useAuthStore";
 
 const SettingsPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAuthStore();
+  const initialTab = searchParams.get("tab") || "personal-info";
 
   return (
     <main className="min-h-screen bg-muted/40 p-6">
@@ -19,7 +21,7 @@ const SettingsPage = () => {
           Về trang chính
         </Button>
 
-        <Tabs defaultValue="personal-info" className="my-4">
+        <Tabs defaultValue={initialTab} className="my-4">
           <TabsList className="grid w-full grid-cols-3 glass-light">
             <TabsTrigger value="personal-info" className="data-[state=active]:glass-strong">
               Thông tin cá nhân

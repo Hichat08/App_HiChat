@@ -10,6 +10,14 @@ import VoiceCallOverlay from "./VoiceCallOverlay";
 import type { Participant } from "@/types/chat";
 import { useSocketStore } from "@/stores/useSocketStore";
 import { toast } from "sonner";
+import { getChatPaletteById } from "@/stores/useChatAppearanceStore";
+import type { CSSProperties } from "react";
+import { cn } from "@/lib/utils";
+import {
+  getLoveStreakPaletteByCount,
+  getLoveStreakTierKey,
+  isLoveStreakMode,
+} from "./loveStreakTheme";
 
 const OUTGOING_CALL_TIMEOUT_MS = 30000;
 
@@ -471,9 +479,59 @@ const ChatWindowLayout = () => {
     return <ChatWindowSkeleton />;
   }
 
+  const streakModeType = selectedConvo.streakMode?.type;
+  const isLoveMode = streakModeType === "love" || streakModeType === "dating";
+  const loveStreakActive =
+    selectedConvo.type === "direct"
+    && isLoveStreakMode(selectedConvo.streakMode?.type)
+    && (selectedConvo.streakMode?.status || "none") !== "none";
+  const loveStreakCount = selectedConvo.streakCount ?? 0;
+  const directPalette =
+    selectedConvo.type === "direct"
+      ? isLoveMode
+        ? getLoveStreakPaletteByCount(loveStreakCount)
+        : getChatPaletteById(selectedConvo.directThemeId || "violet")
+      : null;
+  const loveStreakTier = getLoveStreakTierKey(loveStreakCount);
+  const streakLevelClass = loveStreakActive ? `love-streak-tier-${loveStreakTier}` : "";
+  const streakMilestoneClass =
+    loveStreakActive && loveStreakCount >= 500
+      ? "love-streak-m500"
+      : loveStreakActive && loveStreakCount >= 365
+        ? "love-streak-m365"
+        : loveStreakActive && loveStreakCount >= 100
+          ? "love-streak-m100"
+          : "";
+
+  const directThemeVars: CSSProperties | undefined = directPalette
+    ? ({
+        ["--direct-chat-accent" as string]: `hsl(${directPalette.sent})`,
+        ["--direct-chat-header-bg" as string]: `hsl(${directPalette.received})`,
+        ["--direct-chat-header-border" as string]: `hsl(${directPalette.sent} / 0.20)`,
+        ["--direct-chat-input-bg" as string]: `hsl(${directPalette.received} / 0.92)`,
+        ["--direct-chat-input-border" as string]: `hsl(${directPalette.sent} / 0.30)`,
+        ["--direct-chat-text-muted" as string]: `hsl(${directPalette.receivedForeground} / 0.75)`,
+        ["--direct-chat-bg-image" as string]: `
+          radial-gradient(circle at 20% 18%, hsl(${directPalette.sent} / 0.16) 0%, transparent 34%),
+          radial-gradient(circle at 80% 22%, hsl(${directPalette.sent} / 0.14) 0%, transparent 30%),
+          radial-gradient(circle at 32% 72%, hsl(${directPalette.sent} / 0.12) 0%, transparent 35%),
+          linear-gradient(180deg, hsl(${directPalette.received}) 0%, hsl(${directPalette.sent} / 0.18) 100%)
+        `,
+        ["--love-streak-count" as string]: String(loveStreakCount),
+      } as CSSProperties)
+    : undefined;
+
   return (
     <>
-      <SidebarInset className="flex flex-col h-full flex-1 overflow-hidden rounded-lg sm:rounded-2xl border border-border/60 shadow-sm bg-background">
+      <SidebarInset
+        className={cn(
+          "flex h-full flex-1 flex-col overflow-hidden rounded-lg border border-border/60 bg-background shadow-sm sm:rounded-2xl",
+          loveStreakActive && "love-streak-theme",
+          streakLevelClass,
+          streakMilestoneClass
+        )}
+        style={directThemeVars}
+      >
         {/* Header */}
         <ChatWindowHeader
           chat={selectedConvo}
@@ -482,7 +540,10 @@ const ChatWindowLayout = () => {
         />
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto bg-muted/20">
+        <div
+          className={cn("flex-1 overflow-y-auto", loveStreakActive && "love-streak-surface")}
+          style={directThemeVars ? { backgroundImage: "var(--direct-chat-bg-image)" } : { backgroundColor: "hsl(var(--muted) / 0.2)" }}
+        >
           <ChatWindowBody />
         </div>
 

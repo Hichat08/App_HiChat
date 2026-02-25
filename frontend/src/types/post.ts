@@ -13,6 +13,7 @@ export interface PostAuthor {
   displayName: string;
   username: string;
   avatarUrl?: string | null;
+  isVerified?: boolean;
 }
 
 export interface PostComment {
@@ -27,6 +28,7 @@ export interface PostComment {
 export interface Post {
   _id: string;
   content: string;
+  status?: "active" | "hidden" | "deleted";
   media?: Array<{
     url: string;
     type: "image" | "video";

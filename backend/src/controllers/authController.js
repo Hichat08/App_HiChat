@@ -1,12 +1,20 @@
 // @ts-nocheck
 import bcrypt from "bcrypt";
 import User from "../models/User.js";
+import DeletedAccount from "../models/DeletedAccount.js";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import Session from "../models/Session.js";
 
 const ACCESS_TOKEN_TTL = "30m"; // thuờng là dưới 15m
 const REFRESH_TOKEN_TTL = 14 * 24 * 60 * 60 * 1000; // 14 ngày
+const isProd = process.env.NODE_ENV === "production";
+const refreshCookieOptions = {
+  httpOnly: true,
+  secure: isProd,
+  sameSite: isProd ? "none" : "lax",
+  maxAge: REFRESH_TOKEN_TTL,
+};
 const normalizeDisplayName = (value = "") =>
   value
     .toString()
@@ -134,6 +142,19 @@ export const signIn = async (req, res) => {
     const user = await User.findOne({ username: normalizedUsername });
 
     if (!user) {
+      const deleted = await DeletedAccount.findOne({
+        username: normalizedUsername,
+      }).select("deletedAt displayName").lean();
+
+      if (deleted) {
+        return res.status(410).json({
+          message: "Tài khoản đã bị xoá",
+          code: "USER_DELETED",
+          deletedAt: deleted.deletedAt,
+          displayName: deleted.displayName || "",
+        });
+      }
+
       return res
         .status(401)
         .json({ message: "username hoặc password không chính xác" });
@@ -147,6 +168,22 @@ export const signIn = async (req, res) => {
         .status(401)
         .json({ message: "username hoặc password không chính xác" });
     }
+
+    if (user.isLocked) {
+      return res.status(423).json({
+        message: "Tài khoản đã bị khóa",
+        code: "USER_LOCKED",
+        lockReason: user.lockReason || "",
+        lockedAt: user.lockedAt,
+        displayName: user.displayName || "",
+      });
+    }
+
+    await User.findByIdAndUpdate(user._id, { $set: { lastLoginAt: new Date() } }).catch(
+      (error) => {
+        console.error("Lỗi khi cập nhật lastLoginAt", error);
+      },
+    );
 
     // nếu khớp, tạo accessToken với JWT
     const accessToken = jwt.sign(
@@ -167,12 +204,7 @@ export const signIn = async (req, res) => {
     });
 
     // trả refresh token về trong cookie
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "none", //backend, frontend deploy riêng
-      maxAge: REFRESH_TOKEN_TTL,
-    });
+    res.cookie("refreshToken", refreshToken, refreshCookieOptions);
 
     // trả access token về trong res
     return res
@@ -194,7 +226,11 @@ export const signOut = async (req, res) => {
       await Session.deleteOne({ refreshToken: token });
 
       // xoá cookie
-      res.clearCookie("refreshToken");
+      res.clearCookie("refreshToken", {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: isProd ? "none" : "lax",
+      });
     }
 
     return res.sendStatus(204);
@@ -223,6 +259,20 @@ export const refreshToken = async (req, res) => {
     // kiểm tra hết hạn chưa
     if (session.expiresAt < new Date()) {
       return res.status(403).json({ message: "Token đã hết hạn." });
+    }
+
+    const user = await User.findById(session.userId).select("isLocked lockReason lockedAt");
+    if (!user) {
+      return res.status(404).json({ message: "người dùng không tồn tại." });
+    }
+
+    if (user.isLocked) {
+      return res.status(423).json({
+        message: "Tài khoản đã bị khóa",
+        code: "USER_LOCKED",
+        lockReason: user.lockReason || "",
+        lockedAt: user.lockedAt,
+      });
     }
 
     // tạo access token mới

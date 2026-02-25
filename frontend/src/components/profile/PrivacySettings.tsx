@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { Bell, Shield, ShieldBan } from "lucide-react";
+import { BadgeCheck, Bell, Shield, ShieldBan } from "lucide-react";
 import { toast } from "sonner";
 import {
   Card,
@@ -45,6 +45,41 @@ const PrivacySettings = () => {
   });
   const [deletePassword, setDeletePassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState<
+    "idle" | "pending" | "approved" | "rejected"
+  >("idle");
+  const [verificationLoading, setVerificationLoading] = useState(false);
+  const [submittingVerification, setSubmittingVerification] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadVerificationState = async () => {
+      try {
+        setVerificationLoading(true);
+        const result = await userService.getMyVerificationRequest();
+        if (cancelled) return;
+        if (result?.isVerified) {
+          setVerificationStatus("approved");
+          return;
+        }
+        const status = result?.request?.status;
+        if (status === "pending" || status === "approved" || status === "rejected") {
+          setVerificationStatus(status);
+        } else {
+          setVerificationStatus("idle");
+        }
+      } catch {
+        if (!cancelled) setVerificationStatus(user?.isVerified ? "approved" : "idle");
+      } finally {
+        if (!cancelled) setVerificationLoading(false);
+      }
+    };
+
+    loadVerificationState();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.isVerified]);
 
   const handleChangePassword = async () => {
     try {
@@ -115,6 +150,20 @@ const PrivacySettings = () => {
     }
   };
 
+  const handleSubmitVerificationRequest = async () => {
+    if (verificationStatus === "pending" || verificationStatus === "approved") return;
+    try {
+      setSubmittingVerification(true);
+      const result = await userService.submitVerificationRequest();
+      setVerificationStatus("pending");
+      toast.success(result?.message || "Đã gửi yêu cầu xác minh");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Không thể gửi yêu cầu xác minh");
+    } finally {
+      setSubmittingVerification(false);
+    }
+  };
+
   return (
     <Card className="glass-strong border-border/30">
       <CardHeader>
@@ -128,6 +177,27 @@ const PrivacySettings = () => {
       </CardHeader>
 
       <CardContent className="space-y-6">
+        <Button
+          variant="outline"
+          className="w-full justify-start glass-light border-border/30"
+          onClick={handleSubmitVerificationRequest}
+          disabled={
+            verificationLoading ||
+            submittingVerification ||
+            verificationStatus === "pending" ||
+            verificationStatus === "approved"
+          }
+        >
+          <BadgeCheck className="mr-2 h-4 w-4" />
+          {verificationStatus === "approved"
+            ? "Đã xác minh"
+            : verificationStatus === "pending"
+              ? "Xác minh (Đang chờ admin duyệt)"
+              : verificationStatus === "rejected"
+                ? "Xác minh (Đã từ chối, bấm để gửi lại)"
+                : "Xác minh (Chưa xác minh)"}
+        </Button>
+
         <div className="space-y-4">
           <Dialog>
             <DialogTrigger asChild>

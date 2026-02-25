@@ -20,7 +20,6 @@ import {
   Share2,
   Search,
   Pencil,
-  Plus,
   Trash2,
   ThumbsUp,
   UsersRound,
@@ -1789,7 +1788,7 @@ const FeedView = () => {
             />
           </div>
         </div>
-        <div className="grid grid-cols-5 border-t">
+        <div className="grid grid-cols-5 border-t bg-background">
           <button
             type="button"
             onClick={handleHomeClick}
@@ -1934,83 +1933,6 @@ const FeedView = () => {
                   <Clapperboard className="size-5" />
                 </Button>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="overflow-hidden border-border/40 shadow-sm">
-          <CardContent className="p-3">
-            <div className="flex gap-3 overflow-x-auto pb-1">
-              <div className="relative h-[228px] min-w-[132px] overflow-hidden rounded-2xl border bg-background">
-                <button
-                  type="button"
-                  onClick={() => setStoryPickerOpen(true)}
-                  className="group flex h-full w-full flex-col"
-                  title="Tạo tin"
-                >
-                  <div className="relative h-[165px] bg-muted">
-                    {user?.avatarUrl ? (
-                      <img
-                        src={user.avatarUrl}
-                        alt={user.displayName}
-                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-4xl font-semibold text-muted-foreground">
-                        {user?.displayName?.charAt(0) || "U"}
-                      </div>
-                    )}
-                    <div className="absolute -bottom-5 left-1/2 flex h-10 w-10 -translate-x-1/2 items-center justify-center rounded-full border-4 border-background bg-blue-600 text-white">
-                      <Plus className="size-5" />
-                    </div>
-                  </div>
-                  <div className="flex flex-1 items-end justify-center px-2 pb-3 text-center">
-                    <span className="text-lg font-semibold">Tạo tin</span>
-                  </div>
-                </button>
-              </div>
-
-              {storyPreviewTiles.map((story) => (
-                <button
-                  key={story.id}
-                  type="button"
-                  className="group relative h-[228px] min-w-[132px] overflow-hidden rounded-2xl border text-left"
-                  onClick={() => handleOpenStoryViewer(story.authorId, story.id)}
-                  title={story.authorName}
-                >
-                  {story.previewUrl ? (
-                    <img
-                      src={story.previewUrl}
-                      alt={story.authorName}
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-500 to-indigo-600 px-3 text-center text-sm font-semibold text-white">
-                      {story.contentSnippet || "Tin văn bản"}
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/65" />
-                  <Avatar className="absolute left-2 top-2 z-10 h-10 w-10 shrink-0 border-2 border-blue-500">
-                    <AvatarImage src={story.avatarUrl ?? undefined} alt={story.authorName} />
-                    <AvatarFallback>{story.authorName.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                  <p className="absolute bottom-2 left-2 right-2 truncate text-sm font-semibold text-white">
-                    {story.authorName}
-                  </p>
-                  <span className="absolute right-2 top-2 z-10 rounded-full bg-black/55 px-2 py-0.5 text-xs text-white">
-                    {story.storyType === "video" ? "Video" : story.storyType === "music" ? "Nhạc" : "Tin"}
-                  </span>
-                </button>
-              ))}
-
-              <button
-                type="button"
-                className="flex h-[228px] min-w-[52px] items-center justify-center rounded-2xl border bg-background text-muted-foreground hover:text-foreground"
-                onClick={() => navigate("/profile")}
-                title="Xem thêm"
-              >
-                <ChevronRight className="size-6" />
-              </button>
             </div>
           </CardContent>
         </Card>
@@ -2751,6 +2673,101 @@ const FeedView = () => {
           </DialogContent>
         </Dialog>
 
+        {shouldRenderInlineSuggestions && (
+          <Card className="overflow-hidden border-border/40 shadow-sm">
+            <CardContent className="p-3">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <UsersRound className="size-5 text-muted-foreground" />
+                  <h3 className="text-xl font-semibold">Những người bạn có thể biết</h3>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      localStorage.setItem(
+                        LAST_SUGGESTIONS_OPENED_AT_KEY,
+                        Date.now().toString()
+                      );
+                    }
+                    navigate("/suggestions");
+                  }}
+                >
+                  Xem tất cả
+                </Button>
+              </div>
+
+              <div className="flex gap-3 overflow-x-auto pb-1">
+                {inlineSuggestions.map((suggestion) => (
+                  <div
+                    key={suggestion._id}
+                    className="min-w-[210px] max-w-[210px] overflow-hidden rounded-2xl border bg-background"
+                  >
+                    <div className="relative h-[170px] bg-muted">
+                      <button
+                        type="button"
+                        className="h-full w-full"
+                        onClick={() => openUserProfile(suggestion._id)}
+                        title="Xem trang cá nhân"
+                      >
+                        {suggestion.avatarUrl ? (
+                          <img
+                            src={suggestion.avatarUrl}
+                            alt={suggestion.displayName || suggestion.username || "user"}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-4xl font-bold text-muted-foreground">
+                            {(suggestion.displayName || suggestion.username || "U")
+                              .charAt(0)
+                              .toUpperCase()}
+                          </div>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        className="absolute right-2 top-2 rounded-full bg-black/45 p-1.5 text-white hover:bg-black/60"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleDismissInlineSuggestion(suggestion._id);
+                        }}
+                        title="Ẩn gợi ý"
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-2 p-3">
+                      <button
+                        type="button"
+                        className="block w-full truncate text-left text-lg font-semibold hover:underline"
+                        onClick={() => openUserProfile(suggestion._id)}
+                      >
+                        {suggestion.displayName || suggestion.username || "Người dùng"}
+                      </button>
+                      <p className="text-sm text-muted-foreground">
+                        {(suggestion.mutualCount ?? 0) > 0
+                          ? `${suggestion.mutualCount} bạn chung`
+                          : "Có thể bạn đã từng biết"}
+                      </p>
+                      <Button
+                        type="button"
+                        className="w-full"
+                        onClick={() => handleSendInlineSuggestionRequest(suggestion._id)}
+                      >
+                        <UserPlus className="mr-2 size-4" />
+                        Thêm bạn bè
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="space-y-3">
           {feedLoading ? (
             <Card>
@@ -2765,103 +2782,8 @@ const FeedView = () => {
               </CardContent>
             </Card>
           ) : (
-            visibleFeedPosts.map((post, index) => (
+            visibleFeedPosts.map((post) => (
               <div key={post._id} className="space-y-3">
-                {shouldRenderInlineSuggestions && index === 2 && (
-                  <Card className="overflow-hidden border-border/40 shadow-sm">
-                    <CardContent className="p-3">
-                      <div className="mb-3 flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <UsersRound className="size-5 text-muted-foreground" />
-                          <h3 className="text-xl font-semibold">Những người bạn có thể biết</h3>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            if (typeof window !== "undefined") {
-                              localStorage.setItem(
-                                LAST_SUGGESTIONS_OPENED_AT_KEY,
-                                Date.now().toString()
-                              );
-                            }
-                            navigate("/suggestions");
-                          }}
-                        >
-                          Xem tất cả
-                        </Button>
-                      </div>
-
-                      <div className="flex gap-3 overflow-x-auto pb-1">
-                        {inlineSuggestions.map((suggestion) => (
-                          <div
-                            key={suggestion._id}
-                            className="min-w-[210px] max-w-[210px] overflow-hidden rounded-2xl border bg-background"
-                          >
-                            <div className="relative h-[170px] bg-muted">
-                              <button
-                                type="button"
-                                className="h-full w-full"
-                                onClick={() => openUserProfile(suggestion._id)}
-                                title="Xem trang cá nhân"
-                              >
-                                {suggestion.avatarUrl ? (
-                                  <img
-                                    src={suggestion.avatarUrl}
-                                    alt={suggestion.displayName || suggestion.username || "user"}
-                                    className="h-full w-full object-cover"
-                                  />
-                                ) : (
-                                  <div className="flex h-full w-full items-center justify-center text-4xl font-bold text-muted-foreground">
-                                    {(suggestion.displayName || suggestion.username || "U")
-                                      .charAt(0)
-                                      .toUpperCase()}
-                                  </div>
-                                )}
-                              </button>
-                              <button
-                                type="button"
-                                className="absolute right-2 top-2 rounded-full bg-black/45 p-1.5 text-white hover:bg-black/60"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  handleDismissInlineSuggestion(suggestion._id);
-                                }}
-                                title="Ẩn gợi ý"
-                              >
-                                <X className="size-4" />
-                              </button>
-                            </div>
-
-                            <div className="space-y-2 p-3">
-                              <button
-                                type="button"
-                                className="block w-full truncate text-left text-lg font-semibold hover:underline"
-                                onClick={() => openUserProfile(suggestion._id)}
-                              >
-                                {suggestion.displayName || suggestion.username || "Người dùng"}
-                              </button>
-                              <p className="text-sm text-muted-foreground">
-                                {(suggestion.mutualCount ?? 0) > 0
-                                  ? `${suggestion.mutualCount} bạn chung`
-                                  : "Có thể bạn đã từng biết"}
-                              </p>
-                              <Button
-                                type="button"
-                                className="w-full"
-                                onClick={() => handleSendInlineSuggestionRequest(suggestion._id)}
-                              >
-                                <UserPlus className="mr-2 size-4" />
-                                Thêm bạn bè
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-
                 <Card className="overflow-hidden border-border/40 shadow-sm">
                 <CardContent className="p-0">
                   <div className="px-4 pt-3 pb-2">

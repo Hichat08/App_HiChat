@@ -3,6 +3,7 @@ import User from "../models/User.js";
 import FriendRequest from "../models/FriendRequest.js";
 import Conversation from "../models/Conversation.js";
 import UserBlock from "../models/UserBlock.js";
+import FriendLockVote from "../models/FriendLockVote.js";
 import { io } from "../socket/index.js";
 
 export const sendFriendRequest = async (req, res) => {
@@ -181,7 +182,7 @@ export const declineFriendRequest = async (req, res) => {
 
 export const getAllFriends = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user._id.toString();
 
     const friendships = await Friend.find({
       $or: [
@@ -193,8 +194,8 @@ export const getAllFriends = async (req, res) => {
         },
       ],
     })
-      .populate("userA", "_id displayName avatarUrl username")
-      .populate("userB", "_id displayName avatarUrl username")
+      .populate("userA", "_id displayName avatarUrl username isLocked lockReason lockedAt")
+      .populate("userB", "_id displayName avatarUrl username isLocked lockReason lockedAt")
       .lean();
 
     if (!friendships.length) {
@@ -202,12 +203,149 @@ export const getAllFriends = async (req, res) => {
     }
 
     const friends = friendships.map((f) =>
-      f.userA._id.toString() === userId.toString() ? f.userB : f.userA,
+      f.userA._id.toString() === userId ? f.userB : f.userA,
     );
 
-    return res.status(200).json({ friends });
+    const lockedFriends = friends.filter((friend) => friend?.isLocked && friend?.lockedAt);
+    if (!lockedFriends.length) {
+      return res.status(200).json({ friends });
+    }
+
+    const lockedUserIds = lockedFriends.map((friend) => friend._id);
+    const voteDocs = await FriendLockVote.find({
+      lockedUserId: { $in: lockedUserIds },
+    })
+      .select("lockedUserId lockedAtSnapshot voterId vote")
+      .lean();
+
+    const myVotes = new Map();
+    const voteCounter = new Map();
+
+    voteDocs.forEach((doc) => {
+      const key = `${doc.lockedUserId?.toString?.()}::${new Date(doc.lockedAtSnapshot).toISOString()}`;
+
+      if (!voteCounter.has(key)) {
+        voteCounter.set(key, { safe: 0, suspicious: 0, total: 0 });
+      }
+      const current = voteCounter.get(key);
+      if (doc.vote === "safe") current.safe += 1;
+      if (doc.vote === "suspicious") current.suspicious += 1;
+      current.total += 1;
+
+      if (doc.voterId?.toString?.() === userId) {
+        myVotes.set(key, doc.vote);
+      }
+    });
+
+    const enrichedFriends = friends.map((friend) => {
+      if (!friend?.isLocked || !friend?.lockedAt) return friend;
+
+      const key = `${friend._id.toString()}::${new Date(friend.lockedAt).toISOString()}`;
+      const counts = voteCounter.get(key) || { safe: 0, suspicious: 0, total: 0 };
+      const myVote = myVotes.get(key) || null;
+
+      return {
+        ...friend,
+        lockIncident: {
+          active: true,
+          lockedAt: friend.lockedAt,
+          lockReason: friend.lockReason || "",
+          hasVoted: !!myVote,
+          myVote,
+          counts,
+        },
+      };
+    });
+
+    return res.status(200).json({ friends: enrichedFriends });
   } catch (error) {
     console.error("Lỗi khi lấy danh sách bạn bè", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+export const voteFriendLockIncident = async (req, res) => {
+  try {
+    const voterId = req.user?._id?.toString?.();
+    const { targetUserId, vote } = req.body || {};
+
+    if (!targetUserId || !["safe", "suspicious"].includes(vote)) {
+      return res.status(400).json({
+        message: "Dữ liệu bình chọn không hợp lệ",
+      });
+    }
+
+    if (voterId === targetUserId.toString()) {
+      return res.status(400).json({ message: "Không thể tự bình chọn cho chính mình" });
+    }
+
+    const [userA, userB] =
+      voterId < targetUserId.toString()
+        ? [voterId, targetUserId.toString()]
+        : [targetUserId.toString(), voterId];
+
+    const friendship = await Friend.findOne({ userA, userB }).lean();
+    if (!friendship) {
+      return res.status(403).json({ message: "Chỉ bạn bè mới có thể bình chọn" });
+    }
+
+    const targetUser = await User.findById(targetUserId)
+      .select("_id isLocked lockReason lockedAt")
+      .lean();
+
+    if (!targetUser) {
+      return res.status(404).json({ message: "Không tìm thấy người dùng" });
+    }
+
+    if (!targetUser.isLocked || !targetUser.lockedAt) {
+      return res.status(400).json({ message: "Tài khoản này hiện không bị khóa" });
+    }
+
+    await FriendLockVote.findOneAndUpdate(
+      {
+        lockedUserId: targetUser._id,
+        voterId,
+        lockedAtSnapshot: targetUser.lockedAt,
+      },
+      { $set: { vote } },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+
+    const countsRows = await FriendLockVote.aggregate([
+      {
+        $match: {
+          lockedUserId: targetUser._id,
+          lockedAtSnapshot: targetUser.lockedAt,
+        },
+      },
+      {
+        $group: {
+          _id: "$vote",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const counts = { safe: 0, suspicious: 0, total: 0 };
+    countsRows.forEach((row) => {
+      if (row._id === "safe") counts.safe = row.count;
+      if (row._id === "suspicious") counts.suspicious = row.count;
+      counts.total += row.count;
+    });
+
+    return res.status(200).json({
+      message: "Đã ghi nhận bình chọn",
+      lockIncident: {
+        active: true,
+        lockedAt: targetUser.lockedAt,
+        lockReason: targetUser.lockReason || "",
+        hasVoted: true,
+        myVote: vote,
+        counts,
+      },
+    });
+  } catch (error) {
+    console.error("Lỗi khi bình chọn tài khoản bị khóa", error);
     return res.status(500).json({ message: "Lỗi hệ thống" });
   }
 };

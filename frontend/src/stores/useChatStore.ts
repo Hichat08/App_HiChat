@@ -97,7 +97,7 @@ export const useChatStore = create<ChatState>()(
           );
           set((state) => ({
             conversations: state.conversations.map((c) =>
-              c._id === activeConversationId ? { ...c, seenBy: [] } : c
+              c._id === activeConversationId ? { ...c, seenBy: [], archived: false } : c
             ),
           }));
         } catch (error) {
@@ -110,7 +110,7 @@ export const useChatStore = create<ChatState>()(
           await chatService.sendGroupMessage(conversationId, content, imgUrl, audioUrl, videoUrl);
           set((state) => ({
             conversations: state.conversations.map((c) =>
-              c._id === get().activeConversationId ? { ...c, seenBy: [] } : c
+              c._id === get().activeConversationId ? { ...c, seenBy: [], archived: false } : c
             ),
           }));
         } catch (error) {
@@ -417,6 +417,115 @@ export const useChatStore = create<ChatState>()(
           return res.restrictedByMe;
         } catch (error) {
           console.error("Lỗi khi cập nhật trạng thái hạn chế", error);
+          throw error;
+        }
+      },
+      updateConversationTheme: async (conversationId, themeId) => {
+        try {
+          const res = await chatService.updateConversationTheme(conversationId, themeId);
+          get().updateConversation({
+            _id: conversationId,
+            directThemeId: res.directThemeId,
+          });
+        } catch (error) {
+          console.error("Lỗi khi cập nhật chủ đề cuộc trò chuyện", error);
+          throw error;
+        }
+      },
+      updateConversationNickname: async (conversationId, targetUserId, nickname) => {
+        try {
+          const res = await chatService.updateConversationNickname(
+            conversationId,
+            targetUserId,
+            nickname
+          );
+          const { user } = useAuthStore.getState();
+          const key =
+            user?._id && targetUserId ? `${user._id}:${targetUserId}` : null;
+          set((state) => {
+            const nextConversations = state.conversations.map((c) => {
+              if (c._id !== conversationId) return c;
+              const nextNicknames = {
+                ...(c.nicknames || {}),
+                ...(res.nicknames || {}),
+              };
+              if (key) {
+                if (nickname) {
+                  nextNicknames[key] = nickname;
+                } else {
+                  delete nextNicknames[key];
+                }
+              }
+              return {
+                ...c,
+                nicknames: nextNicknames,
+                nickname,
+              };
+            });
+            return { conversations: nextConversations };
+          });
+        } catch (error) {
+          console.error("Lỗi khi cập nhật biệt danh", error);
+          throw error;
+        }
+      },
+      updateConversationMute: async (conversationId, muted) => {
+        try {
+          const res = await chatService.updateConversationMute(conversationId, muted);
+          get().updateConversation({
+            _id: conversationId,
+            muted: res.muted,
+          });
+        } catch (error) {
+          console.error("Lỗi khi cập nhật tắt thông báo", error);
+          throw error;
+        }
+      },
+      updateConversationReadReceipt: async (conversationId, enabled) => {
+        try {
+          const res = await chatService.updateConversationReadReceipt(conversationId, enabled);
+          get().updateConversation({
+            _id: conversationId,
+            readReceiptEnabled: res.readReceiptEnabled,
+          });
+        } catch (error) {
+          console.error("Lỗi khi cập nhật thông báo đã đọc", error);
+          throw error;
+        }
+      },
+      updateConversationArchive: async (conversationId, archived) => {
+        try {
+          const res = await chatService.updateConversationArchive(conversationId, archived);
+          get().updateConversation({
+            _id: conversationId,
+            archived: res.archived,
+          });
+          if (res.archived && get().activeConversationId === conversationId) {
+            set({ activeConversationId: null });
+          }
+        } catch (error) {
+          console.error("Lỗi khi cập nhật lưu trữ đoạn chat", error);
+          throw error;
+        }
+      },
+      updateConversationE2EE: async (conversationId, enabled) => {
+        try {
+          const res = await chatService.updateConversationE2EE(conversationId, enabled);
+          get().updateConversation({
+            _id: conversationId,
+            e2eeEnabled: res.e2eeEnabled,
+            e2eeActive: res.e2eeActive,
+          });
+        } catch (error) {
+          console.error("Lỗi khi cập nhật mã hóa đầu cuối", error);
+          throw error;
+        }
+      },
+      reportConversation: async (conversationId, reason, detail) => {
+        try {
+          await chatService.reportConversation(conversationId, reason, detail);
+        } catch (error) {
+          console.error("Lỗi khi báo cáo cuộc trò chuyện", error);
           throw error;
         }
       },

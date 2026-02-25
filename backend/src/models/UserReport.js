@@ -25,6 +25,34 @@ const userReportSchema = new mongoose.Schema(
       trim: true,
       maxlength: 1000,
     },
+    isResolved: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    resolvedAt: {
+      type: Date,
+      default: null,
+    },
+    resolvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    isHidden: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    hiddenAt: {
+      type: Date,
+      default: null,
+    },
+    hiddenBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
   },
   {
     timestamps: true,

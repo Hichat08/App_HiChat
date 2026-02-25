@@ -4,7 +4,9 @@ import UserAvatar from "./UserAvatar";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Pause, Play } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type CSSProperties } from "react";
+import { getChatPaletteById } from "@/stores/useChatAppearanceStore";
+import { getLoveStreakTierKey, isLoveStreakMode } from "./loveStreakTheme";
 
 interface MessageItemProps {
   message: Message;
@@ -58,6 +60,28 @@ const MessageItem = ({
     const seed = (message._id || "").split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
     return Array.from({ length: 14 }).map((_, idx) => 18 + ((seed + idx * 11) % 26));
   }, [message._id]);
+  const streakModeType = selectedConvo.streakMode?.type;
+  const isLoveMode = streakModeType === "love" || streakModeType === "dating";
+  const directPalette =
+    selectedConvo.type === "direct"
+      ? getChatPaletteById(isLoveMode ? "rose" : (selectedConvo.directThemeId || "violet"))
+      : null;
+  const directBubbleStyle =
+    directPalette
+      ? ({
+          ["--chat-bubble-sent" as string]: directPalette.sent,
+          ["--chat-bubble-sent-foreground" as string]: directPalette.sentForeground,
+          ["--chat-bubble-received" as string]: directPalette.received,
+          ["--chat-bubble-received-foreground" as string]: directPalette.receivedForeground,
+        } as CSSProperties)
+      : undefined;
+  const loveStreakActive =
+    selectedConvo.type === "direct"
+    && isLoveStreakMode(selectedConvo.streakMode?.type)
+    && (selectedConvo.streakMode?.status || "none") !== "none";
+  const loveTierClass = loveStreakActive
+    ? `love-streak-tier-${getLoveStreakTierKey(selectedConvo.streakCount ?? 0)}`
+    : "";
 
   const handleToggleAudio = () => {
     const player = audioRef.current;
@@ -119,8 +143,13 @@ const MessageItem = ({
           <Card
             className={cn(
               "overflow-hidden p-2.5 sm:p-3",
-              message.isOwn ? "chat-bubble-sent border-0" : "chat-bubble-received"
+              message.isOwn ? "chat-bubble-sent border-0" : "chat-bubble-received",
+              loveStreakActive && "love-streak-bubble",
+              loveStreakActive && loveTierClass,
+              loveStreakActive && message.isOwn && "love-streak-bubble-sent",
+              loveStreakActive && !message.isOwn && "love-streak-bubble-received"
             )}
+            style={directBubbleStyle}
           >
             {message.imgUrl ? (
               <img

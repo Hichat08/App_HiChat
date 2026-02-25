@@ -1,8 +1,10 @@
 import Post from "../models/Post.js";
 import Friend from "../models/Friend.js";
 import PostComment from "../models/PostComment.js";
+import PostReport from "../models/PostReport.js";
 import { uploadMediaFromBuffer } from "../middlewares/uploadMiddleware.js";
 import { io } from "../socket/index.js";
+import { emitAdminReportNotification } from "../utils/adminNotificationHelper.js";
 
 const POST_VISIBILITY = {
   PUBLIC: "public",
@@ -52,6 +54,10 @@ const canViewerAccessPost = (post, viewerId) => {
   const viewer = viewerId.toString();
   const author = post.authorId?._id?.toString?.() ?? post.authorId?.toString?.();
 
+  if (post.status && post.status !== "active") {
+    return author === viewer;
+  }
+
   if (author === viewer) return true;
   if (visibility === POST_VISIBILITY.PUBLIC) return true;
   if (visibility === POST_VISIBILITY.ONLY_ME) return false;
@@ -98,6 +104,7 @@ const formatPost = (post, viewerId) => {
   return {
     _id: post._id,
     content: post.content,
+    status: post.status || "active",
     media: (post.media || []).map((item) => ({
       url: item.url,
       type: item.type,
@@ -110,6 +117,7 @@ const formatPost = (post, viewerId) => {
       displayName: authorObj.displayName,
       username: authorObj.username,
       avatarUrl: authorObj.avatarUrl ?? null,
+      isVerified: authorObj.isVerified ?? false,
     },
     likeCount: reactions.length,
     shareCount: typeof post.shareCount === "number" ? post.shareCount : 0,
@@ -139,6 +147,7 @@ const formatPost = (post, viewerId) => {
               displayName: sharedAuthor.displayName,
               username: sharedAuthor.username,
               avatarUrl: sharedAuthor.avatarUrl ?? null,
+              isVerified: sharedAuthor.isVerified ?? false,
             },
             isUnavailable:
               !sharedAuthorId || !canViewerAccessPost(shared, viewerId),
@@ -162,6 +171,7 @@ const buildCommentPayload = (comment) => {
       displayName: author.displayName,
       username: author.username,
       avatarUrl: author.avatarUrl ?? null,
+      isVerified: author.isVerified ?? false,
     },
   };
 };
@@ -276,7 +286,7 @@ export const createPost = async (req, res) => {
 
     await post.populate({
       path: "authorId",
-      select: "_id displayName username avatarUrl",
+      select: "_id displayName username avatarUrl isVerified",
     });
 
     return res.status(201).json({
@@ -298,7 +308,7 @@ export const updatePost = async (req, res) => {
 
     const post = await Post.findById(postId).populate({
       path: "authorId",
-      select: "_id displayName username avatarUrl",
+      select: "_id displayName username avatarUrl isVerified",
     });
 
     if (!post) {
@@ -440,11 +450,19 @@ export const getPostFeed = async (req, res) => {
     const { cursor, limit = 20 } = req.query;
     const parsedLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
 
+    const activeStatusQuery = {
+      $or: [{ status: "active" }, { status: { $exists: false } }, { status: null }],
+    };
+
     const query = {
       $or: [
         { authorId: userId },
-        { visibility: POST_VISIBILITY.PUBLIC },
         {
+          ...activeStatusQuery,
+          visibility: POST_VISIBILITY.PUBLIC,
+        },
+        {
+          ...activeStatusQuery,
           visibility: POST_VISIBILITY.CUSTOM,
           allowedViewerIds: req.user._id,
         },
@@ -460,13 +478,13 @@ export const getPostFeed = async (req, res) => {
       .limit(parsedLimit + 1)
       .populate({
         path: "authorId",
-        select: "_id displayName username avatarUrl",
+        select: "_id displayName username avatarUrl isVerified",
       })
       .populate({
         path: "sharedPostId",
         populate: {
           path: "authorId",
-          select: "_id displayName username avatarUrl visibility allowedViewerIds",
+          select: "_id displayName username avatarUrl visibility allowedViewerIds isVerified",
         },
       });
 
@@ -490,14 +508,36 @@ export const getPostFeed = async (req, res) => {
       shareCountDocs.map((item) => [item._id.toString(), item.count]),
     );
 
+    let orderedPosts = posts;
+    if (!cursor) {
+      orderedPosts = [...posts].sort((a, b) => {
+        const aVerified = a?.authorId?.isVerified ? 1 : 0;
+        const bVerified = b?.authorId?.isVerified ? 1 : 0;
+        const aEngagement =
+          Number(commentCountMap.get(a._id.toString()) || 0) +
+          Number(shareCountMap.get(a._id.toString()) || 0) +
+          Number(Array.isArray(a.reactions) ? a.reactions.length : (a.likedBy || []).length || 0);
+        const bEngagement =
+          Number(commentCountMap.get(b._id.toString()) || 0) +
+          Number(shareCountMap.get(b._id.toString()) || 0) +
+          Number(Array.isArray(b.reactions) ? b.reactions.length : (b.likedBy || []).length || 0);
+        const aCreated = new Date(a.createdAt || 0).getTime();
+        const bCreated = new Date(b.createdAt || 0).getTime();
+        const aScore = aVerified * 8000 + aEngagement * 20 + aCreated / 1000000;
+        const bScore = bVerified * 8000 + bEngagement * 20 + bCreated / 1000000;
+        return bScore - aScore;
+      });
+    }
+
     let nextCursor = null;
-    if (posts.length > parsedLimit) {
-      const overflow = posts.pop();
+    if (orderedPosts.length > parsedLimit) {
+      const overflow = orderedPosts[parsedLimit];
+      orderedPosts = orderedPosts.slice(0, parsedLimit);
       nextCursor = overflow?.createdAt?.toISOString?.() ?? null;
     }
 
     return res.status(200).json({
-      posts: posts.map((post) =>
+      posts: orderedPosts.map((post) =>
         formatPost(
           {
             ...post.toObject(),
@@ -522,7 +562,7 @@ export const getPostComments = async (req, res) => {
 
     const post = await Post.findById(postId).populate({
       path: "authorId",
-      select: "_id displayName username avatarUrl",
+      select: "_id displayName username avatarUrl isVerified",
     });
 
     if (!post) {
@@ -537,7 +577,7 @@ export const getPostComments = async (req, res) => {
       .sort({ createdAt: 1 })
       .populate({
         path: "authorId",
-        select: "_id displayName username avatarUrl",
+        select: "_id displayName username avatarUrl isVerified",
       });
 
     return res.status(200).json({
@@ -565,7 +605,7 @@ export const addPostComment = async (req, res) => {
 
     const post = await Post.findById(postId).populate({
       path: "authorId",
-      select: "_id displayName username avatarUrl",
+      select: "_id displayName username avatarUrl isVerified",
     });
 
     if (!post) {
@@ -584,7 +624,7 @@ export const addPostComment = async (req, res) => {
 
     await comment.populate({
       path: "authorId",
-      select: "_id displayName username avatarUrl",
+      select: "_id displayName username avatarUrl isVerified",
     });
 
     const commentCount = await PostComment.countDocuments({ postId });
@@ -619,7 +659,7 @@ export const togglePostLike = async (req, res) => {
 
     const post = await Post.findById(postId).populate({
       path: "authorId",
-      select: "_id displayName username avatarUrl",
+      select: "_id displayName username avatarUrl isVerified",
     });
 
     if (!post) {
@@ -699,7 +739,7 @@ export const sharePost = async (req, res) => {
 
     const original = await Post.findById(postId).populate({
       path: "authorId",
-      select: "_id displayName username avatarUrl",
+      select: "_id displayName username avatarUrl isVerified",
     });
 
     if (!original) {
@@ -757,10 +797,10 @@ export const sharePost = async (req, res) => {
     });
 
     await sharedPost.populate([
-      { path: "authorId", select: "_id displayName username avatarUrl" },
+      { path: "authorId", select: "_id displayName username avatarUrl isVerified" },
       {
         path: "sharedPostId",
-        populate: { path: "authorId", select: "_id displayName username avatarUrl" },
+        populate: { path: "authorId", select: "_id displayName username avatarUrl isVerified" },
       },
     ]);
     const commentCount = await PostComment.countDocuments({ postId: sharedPost._id });
@@ -809,6 +849,344 @@ export const deletePost = async (req, res) => {
     return res.status(200).json({ message: "Đã xoá bài viết" });
   } catch (error) {
     console.error("Lỗi khi xoá bài viết", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+export const reportPost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { reason, detail } = req.body || {};
+    const reporterId = req.user?._id;
+
+    if (!reporterId) {
+      return res.status(401).json({ message: "Bạn chưa đăng nhập" });
+    }
+
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ message: "Vui lòng nhập lý do báo cáo" });
+    }
+
+    const post = await Post.findById(postId)
+      .populate({ path: "authorId", select: "_id username displayName avatarUrl" })
+      .lean();
+
+    if (!post) {
+      return res.status(404).json({ message: "Không tìm thấy bài viết cần báo cáo" });
+    }
+
+    if (post.authorId?._id?.toString?.() === reporterId.toString()) {
+      return res.status(400).json({ message: "Bạn không thể tự báo cáo bài viết của mình" });
+    }
+
+    const reportDoc = await PostReport.create({
+      reporterId,
+      postId,
+      reason: reason.trim(),
+      detail: detail?.trim() || "",
+    });
+
+    const authorDisplayName =
+      post.authorId?.displayName || post.authorId?.username || "Người dùng";
+
+    emitAdminReportNotification({
+      reportId: reportDoc?._id,
+      reporter: {
+        _id: reporterId,
+        displayName: req.user?.displayName || "Người dùng",
+        avatarUrl: req.user?.avatarUrl ?? null,
+      },
+      target: {
+        _id: post._id?.toString?.() || post._id,
+        displayName: `Bài viết của ${authorDisplayName}`,
+        avatarUrl: post.authorId?.avatarUrl ?? null,
+      },
+      reason: reason.trim(),
+      detail: detail?.trim() || "",
+      createdAt: reportDoc?.createdAt?.toISOString?.() || new Date().toISOString(),
+      targetType: "post",
+      targetMeta: {
+        postId: post._id?.toString?.() || post._id,
+        authorId: post.authorId?._id?.toString?.() || post.authorId?._id,
+      },
+    });
+
+    return res.status(200).json({ message: "Đã gửi báo cáo bài viết" });
+  } catch (error) {
+    console.error("Lỗi khi báo cáo bài viết", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+export const listPostReports = async (req, res) => {
+  try {
+    const { limit = 50, cursor, status = "all", includeHidden = "false" } = req.query || {};
+    const parsedLimit = Math.min(Math.max(Number(limit) || 50, 1), 100);
+
+    const query = {};
+    const showHidden = includeHidden === "true";
+    if (!showHidden) {
+      query.isHidden = { $ne: true };
+    }
+
+    if (status === "pending") {
+      query.$or = [{ isResolved: false }, { isResolved: { $exists: false } }];
+    } else if (status === "resolved") {
+      query.isResolved = true;
+    }
+
+    if (cursor) {
+      query.createdAt = { $lt: new Date(cursor) };
+    }
+
+    let reports = await PostReport.find(query)
+      .sort({ createdAt: -1 })
+      .limit(parsedLimit + 1)
+      .populate("reporterId", "_id username displayName avatarUrl")
+      .populate("resolvedBy", "_id username displayName avatarUrl")
+      .populate("hiddenBy", "_id username displayName avatarUrl")
+      .populate({
+        path: "postId",
+        select: "_id content createdAt authorId status visibility",
+        populate: { path: "authorId", select: "_id username displayName avatarUrl" },
+      })
+      .lean();
+
+    let nextCursor = null;
+    if (reports.length > parsedLimit) {
+      const nextItem = reports[reports.length - 1];
+      nextCursor = nextItem?.createdAt?.toISOString?.() || null;
+      reports = reports.slice(0, parsedLimit);
+    }
+
+    const [pendingCount, resolvedCount] = await Promise.all([
+      PostReport.countDocuments({
+        isHidden: { $ne: true },
+        $or: [{ isResolved: false }, { isResolved: { $exists: false } }],
+      }),
+      PostReport.countDocuments({
+        isResolved: true,
+      }),
+    ]);
+
+    return res.status(200).json({
+      reports,
+      nextCursor,
+      summary: {
+        pendingCount,
+        resolvedCount,
+      },
+    });
+  } catch (error) {
+    console.error("Lỗi khi lấy danh sách báo cáo bài viết", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+export const resolvePostReport = async (req, res) => {
+  try {
+    const actorId = req.user?._id?.toString();
+    const { reportId } = req.params;
+    const { resolved = true } = req.body || {};
+    const nextResolved = !!resolved;
+
+    const report = await PostReport.findByIdAndUpdate(
+      reportId,
+      {
+        $set: {
+          isResolved: nextResolved,
+          resolvedAt: nextResolved ? new Date() : null,
+          resolvedBy: nextResolved ? actorId : null,
+        },
+      },
+      { new: true },
+    )
+      .populate("reporterId", "_id username displayName avatarUrl")
+      .populate("resolvedBy", "_id username displayName avatarUrl")
+      .populate("hiddenBy", "_id username displayName avatarUrl")
+      .populate({
+        path: "postId",
+        select: "_id content createdAt authorId status visibility",
+        populate: { path: "authorId", select: "_id username displayName avatarUrl" },
+      })
+      .lean();
+
+    if (!report) {
+      return res.status(404).json({ message: "Không tìm thấy báo cáo bài viết" });
+    }
+
+    return res.status(200).json({
+      message: nextResolved ? "Đã đánh dấu xử lý báo cáo" : "Đã bỏ trạng thái xử lý",
+      report,
+    });
+  } catch (error) {
+    console.error("Lỗi khi cập nhật xử lý báo cáo bài viết", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+export const hidePostReport = async (req, res) => {
+  try {
+    const actorId = req.user?._id?.toString();
+    const { reportId } = req.params;
+    const { hidden = true } = req.body || {};
+    const nextHidden = !!hidden;
+
+    const report = await PostReport.findByIdAndUpdate(
+      reportId,
+      {
+        $set: {
+          isHidden: nextHidden,
+          hiddenAt: nextHidden ? new Date() : null,
+          hiddenBy: nextHidden ? actorId : null,
+        },
+      },
+      { new: true },
+    )
+      .populate("reporterId", "_id username displayName avatarUrl")
+      .populate("resolvedBy", "_id username displayName avatarUrl")
+      .populate("hiddenBy", "_id username displayName avatarUrl")
+      .populate({
+        path: "postId",
+        select: "_id content createdAt authorId status visibility",
+        populate: { path: "authorId", select: "_id username displayName avatarUrl" },
+      })
+      .lean();
+
+    if (!report) {
+      return res.status(404).json({ message: "Không tìm thấy báo cáo bài viết" });
+    }
+
+    return res.status(200).json({
+      message: nextHidden ? "Đã ẩn báo cáo khỏi danh sách" : "Đã hiển thị lại báo cáo",
+      report,
+    });
+  } catch (error) {
+    console.error("Lỗi khi ẩn báo cáo bài viết", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+export const deletePostReport = async (req, res) => {
+  try {
+    const { reportId } = req.params;
+
+    const deleted = await PostReport.findByIdAndDelete(reportId).lean();
+    if (!deleted) {
+      return res.status(404).json({ message: "Không tìm thấy báo cáo bài viết" });
+    }
+
+    return res.status(200).json({ message: "Đã xóa lịch sử báo cáo bài viết" });
+  } catch (error) {
+    console.error("Lỗi khi xóa lịch sử báo cáo bài viết", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+export const listAdminPosts = async (req, res) => {
+  try {
+    const { keyword = "", status, limit = 30, cursor } = req.query || {};
+    const parsedLimit = Math.min(Math.max(Number(limit) || 30, 1), 100);
+
+    const query = {};
+    if (status && ["active", "hidden", "deleted"].includes(status)) {
+      query.status = status;
+    }
+
+    if (cursor) {
+      query.createdAt = { $lt: new Date(cursor) };
+    }
+
+    if (keyword) {
+      const escaped = keyword.toString().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      query.$or = [
+        { content: { $regex: escaped, $options: "i" } },
+      ];
+    }
+
+    let posts = await Post.find(query)
+      .sort({ createdAt: -1 })
+      .limit(parsedLimit + 1)
+      .populate({
+        path: "authorId",
+        select: "_id displayName username avatarUrl email isVerified",
+      })
+      .lean();
+
+    let nextCursor = null;
+    if (posts.length > parsedLimit) {
+      const next = posts[posts.length - 1];
+      nextCursor = next?.createdAt?.toISOString?.() || null;
+      posts = posts.slice(0, parsedLimit);
+    }
+
+    const postIds = posts.map((post) => post._id);
+    const commentCountDocs = postIds.length
+      ? await PostComment.aggregate([
+          { $match: { postId: { $in: postIds } } },
+          { $group: { _id: "$postId", count: { $sum: 1 } } },
+        ])
+      : [];
+    const commentCountMap = new Map(
+      commentCountDocs.map((item) => [item._id.toString(), item.count]),
+    );
+    const shareCountDocs = postIds.length
+      ? await Post.aggregate([
+          { $match: { sharedPostId: { $in: postIds } } },
+          { $group: { _id: "$sharedPostId", count: { $sum: 1 } } },
+        ])
+      : [];
+    const shareCountMap = new Map(
+      shareCountDocs.map((item) => [item._id.toString(), item.count]),
+    );
+
+    const formatted = posts.map((post) => ({
+      ...post,
+      status: post.status || "active",
+      commentCount: commentCountMap.get(post._id.toString()) || 0,
+      shareCount: shareCountMap.get(post._id.toString()) || 0,
+      likeCount: Array.isArray(post.reactions)
+        ? post.reactions.length
+        : Array.isArray(post.likedBy)
+          ? post.likedBy.length
+          : 0,
+    }));
+
+    return res.status(200).json({ posts: formatted, nextCursor });
+  } catch (error) {
+    console.error("Lỗi khi lấy danh sách bài viết admin", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+export const updateAdminPostStatus = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { status } = req.body || {};
+
+    if (!["active", "hidden", "deleted"].includes(status)) {
+      return res.status(400).json({ message: "Trạng thái bài viết không hợp lệ" });
+    }
+
+    const updated = await Post.findByIdAndUpdate(
+      postId,
+      { $set: { status } },
+      { new: true },
+    ).populate({
+      path: "authorId",
+      select: "_id displayName username avatarUrl email isVerified",
+    });
+
+    if (!updated) {
+      return res.status(404).json({ message: "Không tìm thấy bài viết" });
+    }
+
+    return res.status(200).json({
+      message: "Đã cập nhật trạng thái bài viết",
+      post: updated,
+    });
+  } catch (error) {
+    console.error("Lỗi khi cập nhật trạng thái bài viết admin", error);
     return res.status(500).json({ message: "Lỗi hệ thống" });
   }
 };

@@ -6,7 +6,10 @@ import InfiniteScroll from "react-infinite-scroll-component";
 import { useAuthStore } from "@/stores/useAuthStore";
 import UserAvatar from "./UserAvatar";
 import StatusBadge from "./StatusBadge";
+import VerifiedBadge from "@/components/ui/verified-badge";
 import { useSocketStore } from "@/stores/useSocketStore";
+import { cn } from "@/lib/utils";
+import { getLoveStreakTierKey, isLoveStreakMode } from "./loveStreakTheme";
 
 const ChatWindowBody = () => {
   const {
@@ -30,6 +33,14 @@ const ChatWindowBody = () => {
   const latestOwnMessageId = [...messages]
     .reverse()
     .find((m) => m.senderId === user?._id)?._id;
+  const loveStreakActive =
+    selectedConvo?.type === "direct"
+    && isLoveStreakMode(selectedConvo?.streakMode?.type)
+    && (selectedConvo?.streakMode?.status || "none") !== "none";
+  const loveTierClass =
+    selectedConvo && loveStreakActive
+      ? `love-streak-tier-${getLoveStreakTierKey(selectedConvo.streakCount ?? 0)}`
+      : "";
 
   // ref
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -118,18 +129,31 @@ const ChatWindowBody = () => {
     if (selectedConvo.type === "direct" && directOtherUser) {
       const isOnline = onlineUsers.includes(directOtherUser._id);
       return (
-        <div className="flex h-full flex-col bg-background px-4 py-6">
+        <div
+          className="flex h-full flex-col px-4 py-6"
+          style={{
+            backgroundImage: "var(--direct-chat-bg-image)",
+          }}
+        >
           <div className="flex flex-1 flex-col items-center justify-center text-center">
-            <div className="relative mb-3">
+            <div className={cn("relative mb-3", loveStreakActive && "love-streak-avatar-wrap", loveTierClass)}>
               <UserAvatar
                 type="chat"
                 name={directOtherUser.displayName}
                 avatarUrl={directOtherUser.avatarUrl ?? undefined}
-                className="size-20 sm:size-24 text-3xl sm:text-4xl"
+                className={cn(
+                  "size-20 text-3xl sm:size-24 sm:text-4xl",
+                  loveStreakActive && "love-streak-avatar-ring"
+                )}
               />
               <StatusBadge status={isOnline ? "online" : "offline"} />
             </div>
-            <p className="text-2xl sm:text-3xl font-semibold">{directOtherUser.displayName}</p>
+            <p className="text-2xl sm:text-3xl font-semibold">
+              <span className="inline-flex items-center gap-1">
+                {directOtherUser.displayName}
+                {directOtherUser.isVerified ? <VerifiedBadge /> : null}
+              </span>
+            </p>
             <p className="mt-1 text-base text-muted-foreground">
               {isOnline ? "Đang hoạt động" : "Đang ngoại tuyến"}
             </p>

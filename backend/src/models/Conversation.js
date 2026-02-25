@@ -138,6 +138,82 @@ const conversationSchema = new mongoose.Schema(
         default: null,
       },
     },
+    // shared direct-chat theme (both participants see same)
+    directThemeId: {
+      type: String,
+      default: "violet",
+      trim: true,
+    },
+    // per-user nickname (key: "viewerId:targetId" -> nickname)
+    nicknames: {
+      type: Map,
+      of: String,
+      default: {},
+    },
+    // per-user mute flag
+    mutedBy: {
+      type: Map,
+      of: Boolean,
+      default: {},
+    },
+    // per-user read receipt flag (default true if missing)
+    readReceiptBy: {
+      type: Map,
+      of: Boolean,
+      default: {},
+    },
+    // per-user archive flag
+    archivedBy: {
+      type: Map,
+      of: Boolean,
+      default: {},
+    },
+    // per-user end-to-end encryption preference
+    e2eeEnabledBy: {
+      type: Map,
+      of: Boolean,
+      default: {},
+    },
+    // active only when all participants enable
+    e2eeActive: {
+      type: Boolean,
+      default: false,
+    },
+    // direct streak mode requires both participants to accept before active
+    streakMode: {
+      type: {
+        type: String,
+        enum: ["love", "dating", "friends", null],
+        default: null,
+      },
+      status: {
+        type: String,
+        enum: ["none", "pending", "active"],
+        default: "none",
+      },
+      requestedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+      requestedAt: {
+        type: Date,
+        default: null,
+      },
+      acceptedUserIds: {
+        type: [
+          {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+          },
+        ],
+        default: [],
+      },
+      activatedAt: {
+        type: Date,
+        default: null,
+      },
+    },
   },
   {
     timestamps: true,

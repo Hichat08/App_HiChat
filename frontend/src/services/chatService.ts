@@ -99,6 +99,79 @@ export const chatService = {
     return res.data;
   },
 
+  async updateConversationTheme(
+    conversationId: string,
+    themeId: string
+  ): Promise<{ message: string; directThemeId: string }> {
+    const res = await api.patch(`/conversations/${conversationId}/theme`, {
+      themeId,
+    });
+    return res.data;
+  },
+
+  async updateConversationNickname(
+    conversationId: string,
+    targetUserId: string,
+    nickname: string
+  ): Promise<{ message: string; nickname: string; nicknames?: Record<string, string> }> {
+    const res = await api.patch(`/conversations/${conversationId}/nickname`, {
+      targetUserId,
+      nickname,
+    });
+    return res.data;
+  },
+
+  async updateGroupNickname(
+    conversationId: string,
+    nickname: string
+  ): Promise<{ message: string; nickname: string; nicknames?: Record<string, string> }> {
+    const res = await api.patch(`/conversations/${conversationId}/group-nickname`, {
+      nickname,
+    });
+    return res.data;
+  },
+
+  async updateConversationMute(
+    conversationId: string,
+    muted: boolean
+  ): Promise<{ message: string; muted: boolean }> {
+    const res = await api.patch(`/conversations/${conversationId}/mute`, { muted });
+    return res.data;
+  },
+
+  async updateConversationReadReceipt(
+    conversationId: string,
+    enabled: boolean
+  ): Promise<{ message: string; readReceiptEnabled: boolean }> {
+    const res = await api.patch(`/conversations/${conversationId}/read-receipt`, { enabled });
+    return res.data;
+  },
+
+  async updateConversationArchive(
+    conversationId: string,
+    archived: boolean
+  ): Promise<{ message: string; archived: boolean }> {
+    const res = await api.patch(`/conversations/${conversationId}/archive`, { archived });
+    return res.data;
+  },
+
+  async updateConversationE2EE(
+    conversationId: string,
+    enabled: boolean
+  ): Promise<{ message: string; e2eeEnabled: boolean; e2eeActive: boolean }> {
+    const res = await api.patch(`/conversations/${conversationId}/e2ee`, { enabled });
+    return res.data;
+  },
+
+  async reportConversation(
+    conversationId: string,
+    reason: string,
+    detail?: string
+  ): Promise<{ message: string }> {
+    const res = await api.post(`/conversations/${conversationId}/report`, { reason, detail });
+    return res.data;
+  },
+
   async createConversation(
     type: "direct" | "group",
     name: string,
@@ -115,6 +188,49 @@ export const chatService = {
 
   async rejectDirectRequest(conversationId: string) {
     const res = await api.patch(`/messages/direct/${conversationId}/reject`);
+    return res.data;
+  },
+
+  async requestDirectStreakMode(
+    conversationId: string,
+    type: "love" | "friends"
+  ): Promise<{ message: string; streakMode: Conversation["streakMode"]; directThemeId?: string }> {
+    const res = await api.patch(`/messages/direct/${conversationId}/streak-mode/request`, { type });
+    return res.data;
+  },
+
+  async acceptDirectStreakMode(
+    conversationId: string
+  ): Promise<{
+    message: string;
+    streakMode: Conversation["streakMode"];
+    directThemeId?: string;
+    streakCount?: number;
+  }> {
+    const res = await api.patch(`/messages/direct/${conversationId}/streak-mode/accept`);
+    return res.data;
+  },
+
+  async rejectDirectStreakMode(
+    conversationId: string
+  ): Promise<{
+    message: string;
+    streakMode: Conversation["streakMode"];
+    directThemeId?: string;
+    streakCount?: number;
+  }> {
+    const res = await api.patch(`/messages/direct/${conversationId}/streak-mode/reject`);
+    return res.data;
+  },
+
+  async voteLockedRecipientIncident(
+    targetUserId: string,
+    vote: "safe" | "suspicious"
+  ): Promise<{ message: string; hasVoted: boolean; myVote: "safe" | "suspicious" }> {
+    const res = await api.post("/messages/direct/locked-recipient-vote", {
+      targetUserId,
+      vote,
+    });
     return res.data;
   },
 
@@ -136,5 +252,18 @@ export const chatService = {
       headers: { "Content-Type": "multipart/form-data" },
     });
     return res.data.conversation;
+  },
+
+  async updateGroupName(
+    conversationId: string,
+    name: string
+  ): Promise<Conversation> {
+    const res = await api.patch(`/conversations/${conversationId}/name`, { name });
+    return res.data.conversation;
+  },
+
+  async leaveGroup(conversationId: string): Promise<{ removedConversationId?: string; conversation?: Conversation }> {
+    const res = await api.patch(`/conversations/${conversationId}/leave`);
+    return res.data;
   },
 };

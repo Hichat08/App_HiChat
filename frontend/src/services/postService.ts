@@ -114,4 +114,53 @@ export const postService = {
       commentCount: Number(res.data?.commentCount || 0),
     };
   },
+  reportPost: async (postId: string, payload: { reason: string; detail?: string }) => {
+    const res = await api.post(`/posts/${postId}/report`, payload);
+    return res.data;
+  },
+  listAdminPosts: async (params?: {
+    keyword?: string;
+    status?: "active" | "hidden" | "deleted";
+    limit?: number;
+    cursor?: string | null;
+  }) => {
+    const res = await api.get("/posts/admin/list", { params });
+    return res.data;
+  },
+  updateAdminPostStatus: async (postId: string, status: "active" | "hidden" | "deleted") => {
+    const res = await api.patch(`/posts/admin/${postId}/status`, { status });
+    return res.data;
+  },
+  listPostReports: async (
+    limit: number = 50,
+    cursor?: string | null,
+    status: "all" | "pending" | "resolved" = "all",
+    includeHidden: boolean = false,
+  ) => {
+    const res = await api.get("/posts/admin/reports", {
+      params: {
+        limit,
+        cursor: cursor || undefined,
+        status,
+        includeHidden: includeHidden ? "true" : "false",
+      },
+    });
+    return res.data;
+  },
+  resolvePostReport: async (reportId: string, resolved: boolean = true) => {
+    const res = await api.patch(`/posts/admin/reports/${reportId}/resolve`, {
+      resolved,
+    });
+    return res.data;
+  },
+  hidePostReport: async (reportId: string, hidden: boolean = true) => {
+    const res = await api.patch(`/posts/admin/reports/${reportId}/hide`, {
+      hidden,
+    });
+    return res.data;
+  },
+  deletePostReport: async (reportId: string) => {
+    const res = await api.delete(`/posts/admin/reports/${reportId}`);
+    return res.data;
+  },
 };

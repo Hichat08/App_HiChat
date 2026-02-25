@@ -13,9 +13,9 @@ const GroupChatList = ({ searchQuery = "", unreadOnly = false }: GroupChatListPr
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const groupchats = conversations.filter((convo) => {
-    if (convo.type !== "group") return false;
+    if (convo.type !== "group" || convo.archived) return false;
 
-    const groupName = (convo.group?.name || "").toLowerCase();
+    const groupName = (convo.nickname || convo.group?.name || "").toLowerCase();
     if (normalizedQuery && !groupName.includes(normalizedQuery)) return false;
 
     if (!unreadOnly) return true;

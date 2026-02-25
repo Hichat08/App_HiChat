@@ -36,10 +36,13 @@ export const useFriendStore = create<FriendState>((set) => ({
 
       return resultMessage;
     } catch (error: any) {
-      console.error(
-        "Lỗi xảy ra khi addFriend",
-        error?.response?.data || error.message,
-      );
+      const status = error?.response?.status;
+      if (!status || status >= 500) {
+        console.error(
+          "Lỗi xảy ra khi addFriend",
+          error?.response?.data || error.message,
+        );
+      }
 
       // ✅ QUAN TRỌNG: ném lỗi để UI xử lý đúng
       throw error;

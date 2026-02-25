@@ -66,7 +66,9 @@ export const useAuthStore = create<AuthState>()(
           toast.success("Chào mừng bạn quay lại với HiChat 🎉");
         } catch (error) {
           console.error(error);
-          toast.error("Đăng nhập không thành công!");
+          const message =
+            (error as any)?.response?.data?.message || "Đăng nhập không thành công!";
+          toast.error(message);
           throw error;
         } finally {
           set({ loading: false });
@@ -89,6 +91,24 @@ export const useAuthStore = create<AuthState>()(
 
           set({ user });
         } catch (error) {
+          const status = (error as any)?.response?.status;
+          const code = (error as any)?.response?.data?.code;
+          const lockReason = (error as any)?.response?.data?.lockReason || "";
+          const lockedAt = (error as any)?.response?.data?.lockedAt || null;
+          if (status === 423 || code === "USER_LOCKED") {
+            const current = get().user;
+            if (current) {
+              set({
+                user: {
+                  ...current,
+                  isLocked: true,
+                  lockReason,
+                  lockedAt,
+                },
+              });
+            }
+            return;
+          }
           console.error(error);
           set({ user: null, accessToken: null });
           toast.error("Lỗi xảy ra khi lấy dữ liệu người dùng. Hãy thử lại!");
@@ -108,6 +128,24 @@ export const useAuthStore = create<AuthState>()(
             await fetchMe();
           }
         } catch (error) {
+          const status = (error as any)?.response?.status;
+          const code = (error as any)?.response?.data?.code;
+          const lockReason = (error as any)?.response?.data?.lockReason || "";
+          const lockedAt = (error as any)?.response?.data?.lockedAt || null;
+          if (status === 423 || code === "USER_LOCKED") {
+            const current = get().user;
+            if (current) {
+              set({
+                user: {
+                  ...current,
+                  isLocked: true,
+                  lockReason,
+                  lockedAt,
+                },
+              });
+            }
+            return;
+          }
           console.error(error);
           toast.error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại!");
           get().clearState();

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ff5f9f"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="36%" r="58%">
+      <stop offset="0%" stop-color="#ffd9ec" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#ffd9ec" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1080" height="1080" fill="url(#bg)"/>
+  <circle cx="540" cy="360" r="300" fill="url(#glow)"/>
+  <text x="540" y="350" text-anchor="middle" font-size="220" fill="white">❤</text>
+  <text x="540" y="510" text-anchor="middle" fill="white" font-size="82" font-family="Arial, sans-serif" font-weight="700">Chuỗi tình yêu</text>
+  <text x="540" y="610" text-anchor="middle" fill="white" font-size="170" font-family="Arial, sans-serif" font-weight="800">3 ngày</text>
+  <text x="540" y="705" text-anchor="middle" fill="rgba(255,255,255,0.95)" font-size="38" font-family="Arial, sans-serif">Mỗi ngày yêu thương là một ngày rực rỡ.</text>
+  <text x="540" y="790" text-anchor="middle" fill="white" font-size="52" font-family="Arial, sans-serif" font-weight="700">User Bốn &amp; User Một</text>
+</svg>
