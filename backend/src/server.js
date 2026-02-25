@@ -24,8 +24,11 @@ const PORT = process.env.PORT || 5004;
 const LOCAL_MEDIA_URL_REGEX =
   /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(\/uploads\/[^\s"'`]+)/i;
 
-const isPlainObject = (value) =>
-  Object.prototype.toString.call(value) === "[object Object]";
+const isPlainObject = (value) => {
+  if (!value || typeof value !== "object") return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+};
 
 const getPublicBaseUrlFromRequest = (req) => {
   const forwardedProtoRaw = req.headers["x-forwarded-proto"];
@@ -37,7 +40,7 @@ const getPublicBaseUrlFromRequest = (req) => {
   return host ? `${protocol}://${host}` : "";
 };
 
-const normalizeLocalMediaUrls = (payload, publicBaseUrl) => {
+const normalizeLocalMediaUrls = (payload, publicBaseUrl, seen = new WeakSet()) => {
   if (typeof payload === "string") {
     if (payload.startsWith("/uploads/")) {
       return publicBaseUrl ? `${publicBaseUrl}${payload}` : payload;
@@ -49,13 +52,17 @@ const normalizeLocalMediaUrls = (payload, publicBaseUrl) => {
   }
 
   if (Array.isArray(payload)) {
-    return payload.map((item) => normalizeLocalMediaUrls(item, publicBaseUrl));
+    if (seen.has(payload)) return payload;
+    seen.add(payload);
+    return payload.map((item) => normalizeLocalMediaUrls(item, publicBaseUrl, seen));
   }
 
   if (isPlainObject(payload)) {
+    if (seen.has(payload)) return payload;
+    seen.add(payload);
     const normalized = {};
     for (const [key, value] of Object.entries(payload)) {
-      normalized[key] = normalizeLocalMediaUrls(value, publicBaseUrl);
+      normalized[key] = normalizeLocalMediaUrls(value, publicBaseUrl, seen);
     }
     return normalized;
   }
@@ -109,8 +116,13 @@ app.use((req, res, next) => {
   res.json = (payload) => {
     const configuredPublicBase = process.env.SERVER_PUBLIC_URL?.trim();
     const publicBaseUrl = configuredPublicBase || getPublicBaseUrlFromRequest(req);
-    const normalizedPayload = normalizeLocalMediaUrls(payload, publicBaseUrl);
-    return originalJson(normalizedPayload);
+    try {
+      const normalizedPayload = normalizeLocalMediaUrls(payload, publicBaseUrl);
+      return originalJson(normalizedPayload);
+    } catch (error) {
+      console.error("Media URL normalize error:", error);
+      return originalJson(payload);
+    }
   };
 
   next();
