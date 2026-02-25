@@ -83,11 +83,9 @@ const saveBufferToLocal = async ({ buffer, mimetype, folder }) => {
   const absolutePath = path.join(absoluteFolder, filename);
   await fs.writeFile(absolutePath, buffer);
   const publicPath = `/${relativeFolder.replace(/\\/g, "/")}/${filename}`;
-  const port = process.env.PORT || 5004;
-  const publicBaseUrl =
-    process.env.SERVER_PUBLIC_URL?.trim() || `http://localhost:${port}`;
+  const publicBaseUrl = process.env.SERVER_PUBLIC_URL?.trim();
   return {
-    secure_url: `${publicBaseUrl}${publicPath}`,
+    secure_url: publicBaseUrl ? `${publicBaseUrl}${publicPath}` : publicPath,
     public_id: `${folder}/${filename}`,
   };
 };

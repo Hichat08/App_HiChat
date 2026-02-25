@@ -21,8 +21,50 @@ dotenv.config();
 
 // const app = express();
 const PORT = process.env.PORT || 5004;
+const LOCAL_MEDIA_URL_REGEX =
+  /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(\/uploads\/[^\s"'`]+)/i;
+
+const isPlainObject = (value) =>
+  Object.prototype.toString.call(value) === "[object Object]";
+
+const getPublicBaseUrlFromRequest = (req) => {
+  const forwardedProtoRaw = req.headers["x-forwarded-proto"];
+  const forwardedProto = Array.isArray(forwardedProtoRaw)
+    ? forwardedProtoRaw[0]
+    : forwardedProtoRaw?.toString().split(",")[0]?.trim();
+  const protocol = forwardedProto || req.protocol || "https";
+  const host = req.get("host");
+  return host ? `${protocol}://${host}` : "";
+};
+
+const normalizeLocalMediaUrls = (payload, publicBaseUrl) => {
+  if (typeof payload === "string") {
+    if (payload.startsWith("/uploads/")) {
+      return publicBaseUrl ? `${publicBaseUrl}${payload}` : payload;
+    }
+
+    const match = payload.match(LOCAL_MEDIA_URL_REGEX);
+    if (!match) return payload;
+    return publicBaseUrl ? `${publicBaseUrl}${match[1]}` : match[1];
+  }
+
+  if (Array.isArray(payload)) {
+    return payload.map((item) => normalizeLocalMediaUrls(item, publicBaseUrl));
+  }
+
+  if (isPlainObject(payload)) {
+    const normalized = {};
+    for (const [key, value] of Object.entries(payload)) {
+      normalized[key] = normalizeLocalMediaUrls(value, publicBaseUrl);
+    }
+    return normalized;
+  }
+
+  return payload;
+};
 
 // middlewares
+app.set("trust proxy", 1);
 app.use(express.json());
 app.use(cookieParser());
 app.use("/uploads", express.static("uploads"));
@@ -60,6 +102,19 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
+
+app.use((req, res, next) => {
+  const originalJson = res.json.bind(res);
+
+  res.json = (payload) => {
+    const configuredPublicBase = process.env.SERVER_PUBLIC_URL?.trim();
+    const publicBaseUrl = configuredPublicBase || getPublicBaseUrlFromRequest(req);
+    const normalizedPayload = normalizeLocalMediaUrls(payload, publicBaseUrl);
+    return originalJson(normalizedPayload);
+  };
+
+  next();
+});
 
 // CLOUDINARY Configuration
 cloudinary.config({
