@@ -6,7 +6,7 @@ import crypto from "crypto";
 
 const MAX_IMAGE_SIZE_MB = 50;
 const MAX_IMAGE_SIZE_BYTES = 1024 * 1024 * MAX_IMAGE_SIZE_MB;
-const MAX_POST_MEDIA_FILES = 10;
+const MAX_POST_MEDIA_FILES = 20;
 const ALLOWED_IMAGE_EXTENSIONS = new Set([
   ".jpg",
   ".jpeg",
@@ -199,6 +199,11 @@ export const uploadPostMedia = (field = "media") => {
         if (err.code === "LIMIT_FILE_SIZE") {
           return res.status(400).json({
             message: `File vượt quá ${MAX_IMAGE_SIZE_MB}MB. Vui lòng chọn file nhỏ hơn.`,
+          });
+        }
+        if (err.code === "LIMIT_FILE_COUNT") {
+          return res.status(400).json({
+            message: `Mỗi bài chỉ được tối đa ${MAX_POST_MEDIA_FILES} ảnh/video.`,
           });
         }
         return res.status(400).json({ message: "File upload không hợp lệ" });

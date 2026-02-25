@@ -213,6 +213,7 @@ const STORY_EXPIRE_MS = 24 * 60 * 60 * 1000;
 const STORY_DISPLAY_MS = 30 * 1000;
 const STORY_VIDEO_MAX_SECONDS = 60;
 const STORY_MARKER_REGEX = /^\[\[story:(text|music|video)(?::([a-z0-9_-]+))?\]\]\s*/i;
+const POST_MEDIA_MAX_FILES = 20;
 
 type StoryMusicTrack = {
   id: string;
@@ -1400,6 +1401,16 @@ const FeedView = () => {
       if (!acceptedFiles.length) return;
     }
 
+    const availableSlots = POST_MEDIA_MAX_FILES - selectedAttachments.length;
+    if (availableSlots <= 0) {
+      toast.warning(`Mỗi bài chỉ được tối đa ${POST_MEDIA_MAX_FILES} ảnh/video.`);
+      return;
+    }
+    if (acceptedFiles.length > availableSlots) {
+      toast.warning(`Chỉ thêm được ${availableSlots} file nữa (tối đa ${POST_MEDIA_MAX_FILES}).`);
+      acceptedFiles = acceptedFiles.slice(0, availableSlots);
+    }
+
     const nextAttachments: LocalAttachment[] = acceptedFiles.map((file) => ({
       id: `${kind}-${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2, 8)}`,
       name: file.name,
@@ -1420,7 +1431,19 @@ const FeedView = () => {
 
   const appendEditingFiles = (files: FileList | null, kind: MediaKind) => {
     if (!files?.length) return;
-    const nextAttachments: LocalAttachment[] = Array.from(files).map((file) => ({
+    let acceptedFiles = Array.from(files);
+    const availableSlots =
+      POST_MEDIA_MAX_FILES - (editingExistingMedia.length + editingNewAttachments.length);
+    if (availableSlots <= 0) {
+      toast.warning(`Mỗi bài chỉ được tối đa ${POST_MEDIA_MAX_FILES} ảnh/video.`);
+      return;
+    }
+    if (acceptedFiles.length > availableSlots) {
+      toast.warning(`Chỉ thêm được ${availableSlots} file nữa (tối đa ${POST_MEDIA_MAX_FILES}).`);
+      acceptedFiles = acceptedFiles.slice(0, availableSlots);
+    }
+
+    const nextAttachments: LocalAttachment[] = acceptedFiles.map((file) => ({
       id: `edit-${kind}-${file.name}-${file.size}-${file.lastModified}-${Math.random()
         .toString(36)
         .slice(2, 8)}`,
