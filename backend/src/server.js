@@ -27,7 +27,7 @@ app.use(express.json());
 app.use(cookieParser());
 app.use("/uploads", express.static("uploads"));
 
-// CORS: allow developer ports and the value from .env
+// CORS: allow developer ports and production domains
 const allowedOrigins = [
   process.env.CLIENT_URL,
   "http://localhost:5173",
@@ -36,15 +36,28 @@ const allowedOrigins = [
   "http://127.0.0.1:5174",
   "https://app-hichat-frontend.vercel.app",
 ].filter(Boolean);
+
 app.use(
   cors({
     origin: (origin, callback) => {
       // allow non-browser clients like Postman (no origin)
       if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
+
+      // check if origin is in whitelist
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // allow any vercel.app domain
+      if (origin && origin.includes("vercel.app")) {
+        return callback(null, true);
+      }
+
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
 
