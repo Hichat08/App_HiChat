@@ -19,9 +19,11 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import type { RelationshipRequest } from "@/types/user";
+import { useLocation } from "react-router";
 
 const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
   const { user, setUser } = useAuthStore();
+  const location = useLocation();
   const quickReaction = useChatAppearanceStore((state) => state.quickReaction);
   const setQuickReaction = useChatAppearanceStore((state) => state.setQuickReaction);
   const {
@@ -68,6 +70,13 @@ const MessageInput = ({ selectedConvo }: { selectedConvo: Conversation }) => {
   } | null>(null);
   const [sendingLockedRecipientVote, setSendingLockedRecipientVote] = useState(false);
   const [lockedRecipientVoteAcknowledged, setLockedRecipientVoteAcknowledged] = useState(false);
+
+  useEffect(() => {
+    const state = location.state as { studyPrompt?: string } | null;
+    const studyPrompt = state?.studyPrompt?.trim();
+    if (!studyPrompt) return;
+    setValue(studyPrompt);
+  }, [location.key, location.state]);
 
   useEffect(() => {
     return () => {

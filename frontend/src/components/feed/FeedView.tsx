@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft,
   Bell,
+  BookOpenCheck,
   ChevronLeft,
   ChevronRight,
   Clapperboard,
@@ -1812,7 +1813,7 @@ const FeedView = () => {
             />
           </div>
         </div>
-        <div className="grid grid-cols-5 border-t bg-background">
+        <div className="grid grid-cols-6 border-t bg-background">
           <button
             type="button"
             onClick={handleHomeClick}
@@ -1866,6 +1867,19 @@ const FeedView = () => {
                 </span>
               )}
             </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/mock-exam-12")}
+            className={cn(
+              "flex h-11 items-center justify-center border-b-2 transition-colors",
+              location.pathname.startsWith("/mock-exam-12")
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+            title="Luyện thi thử 12"
+          >
+            <BookOpenCheck className="size-5" />
           </button>
           <button
             type="button"

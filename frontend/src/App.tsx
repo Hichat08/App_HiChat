@@ -14,8 +14,11 @@ import PostsPage from "./pages/PostsPage";
 import SettingsPage from "./pages/SettingsPage";
 import ArchivePage from "./pages/ArchivePage";
 import AdminAntiScamPage from "./pages/AdminAntiScamPage";
+import AdminExamMonitorPage from "./pages/AdminExamMonitorPage";
 import PageLoader from "./components/ui/PageLoader";
 import AdminRoute from "./components/auth/AdminRoute";
+import MockExam12Page from "./pages/MockExam12Page";
+import MockExamSubjectPage from "./pages/MockExamSubjectPage";
 
 const AppRoutes = () => {
   const { isDark, setTheme } = useThemeStore();
@@ -68,10 +71,14 @@ const AppRoutes = () => {
           <Route path="/suggestions" element={<FriendSuggestionsPage />} />
           <Route path="/profile" element={<UserProfilePage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/archive" element={<ArchivePage />} />
+          <Route path="/mock-exam-12" element={<MockExam12Page />} />
+          <Route path="/mock-exam-12/:subjectId" element={<MockExamSubjectPage />} />
           <Route path="/users/:userId" element={<UserProfilePage />} />
           <Route element={<AdminRoute />}>
             <Route path="/admin" element={<AdminAntiScamPage />} />
             <Route path="/admin/anti-scam" element={<AdminAntiScamPage />} />
+            <Route path="/admin/exam-monitor" element={<AdminExamMonitorPage />} />
           </Route>
         </Route>
       </Routes>
