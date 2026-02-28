@@ -345,6 +345,55 @@ const isActivePost = (post: Post) => {
   return status === "active";
 };
 
+const renderCommentWithMentions = (content: string) => {
+  const text = content || "";
+  const mentionRegex = /@([a-zA-Z0-9._-]{2,32})/g;
+  const result: ReactNode[] = [];
+  let lastIndex = 0;
+  let match = mentionRegex.exec(text);
+  while (match) {
+    const start = match.index;
+    const end = mentionRegex.lastIndex;
+    if (start > lastIndex) {
+      result.push(text.slice(lastIndex, start));
+    }
+    result.push(
+      <span key={`mention-${start}-${end}`} className="font-semibold text-primary">
+        {text.slice(start, end)}
+      </span>,
+    );
+    lastIndex = end;
+    match = mentionRegex.exec(text);
+  }
+  if (lastIndex < text.length) {
+    result.push(text.slice(lastIndex));
+  }
+  return result.length > 0 ? result : text;
+};
+
+const renderTextWithMentions = (content: string) => renderCommentWithMentions(content);
+
+type MentionContext = {
+  start: number;
+  end: number;
+  query: string;
+};
+
+const getMentionContext = (text: string, caret: number): MentionContext | null => {
+  const safeText = text || "";
+  const safeCaret = Math.max(0, Math.min(caret, safeText.length));
+  const prefix = safeText.slice(0, safeCaret);
+  const match = prefix.match(/(^|\s)@([a-zA-Z0-9._-]{0,32})$/);
+  if (!match) return null;
+  const atIndex = prefix.lastIndexOf("@");
+  if (atIndex < 0) return null;
+  return {
+    start: atIndex,
+    end: safeCaret,
+    query: (match[2] || "").toLowerCase(),
+  };
+};
+
 const FeedView = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -386,6 +435,9 @@ const FeedView = () => {
   const [commentsLoadingMap, setCommentsLoadingMap] = useState<Record<string, boolean>>({});
   const [commentSubmittingMap, setCommentSubmittingMap] = useState<Record<string, boolean>>({});
   const [commentInputMap, setCommentInputMap] = useState<Record<string, string>>({});
+  const [commentCaretMap, setCommentCaretMap] = useState<Record<string, number>>({});
+  const [composerCaret, setComposerCaret] = useState(0);
+  const [editingCaret, setEditingCaret] = useState(0);
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
   const [reactionPickerPostId, setReactionPickerPostId] = useState<string | null>(null);
   const [friendRequestOpen, setFriendRequestOpen] = useState(false);
@@ -429,6 +481,7 @@ const FeedView = () => {
   const editImageInputRef = useRef<HTMLInputElement>(null);
   const editVideoInputRef = useRef<HTMLInputElement>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null);
   const reactionPressTimerRef = useRef<number | null>(null);
   const reactionLongPressTriggeredRef = useRef(false);
   const feedVideoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
@@ -484,6 +537,38 @@ const FeedView = () => {
         .filter((id): id is string => !!id && id !== currentUserId)
     );
   }, [currentUserId, friends]);
+
+  const getFriendMentionCandidates = useCallback(
+    (query: string) =>
+      friends
+        .filter((friend) => {
+          const friendId = friend._id?.toString?.() || "";
+          if (friendId && friendId === currentUserId) return false;
+          const uname = (friend.username || "").toLowerCase();
+          const dname = (friend.displayName || "").toLowerCase();
+          if (!uname) return false;
+          if (!query) return true;
+          return uname.includes(query) || dname.includes(query);
+        })
+        .slice(0, 6),
+    [currentUserId, friends],
+  );
+  const composerMentionContext = useMemo(
+    () => getMentionContext(content || "", composerCaret || (content || "").length),
+    [content, composerCaret],
+  );
+  const composerMentionCandidates = useMemo(
+    () => (composerMentionContext ? getFriendMentionCandidates(composerMentionContext.query) : []),
+    [composerMentionContext, getFriendMentionCandidates],
+  );
+  const editingMentionContext = useMemo(
+    () => getMentionContext(editingContent || "", editingCaret || (editingContent || "").length),
+    [editingContent, editingCaret],
+  );
+  const editingMentionCandidates = useMemo(
+    () => (editingMentionContext ? getFriendMentionCandidates(editingMentionContext.query) : []),
+    [editingMentionContext, getFriendMentionCandidates],
+  );
 
   const friendPostNotifications = useMemo(() => {
     if (!currentUserId) return [];
@@ -1102,6 +1187,7 @@ const FeedView = () => {
   const openEditPostDialog = (post: Post) => {
     setEditingPost(post);
     setEditingContent(post.content || "");
+    setEditingCaret((post.content || "").length);
     setEditingVisibility(post.visibility || "public");
     setEditingAllowedViewerIds((post.allowedViewerIds || []).map((id) => id?.toString()).filter(Boolean));
     setEditingExistingMedia(
@@ -1118,10 +1204,45 @@ const FeedView = () => {
     editingNewAttachments.forEach((item) => URL.revokeObjectURL(item.url));
     setEditingPost(null);
     setEditingContent("");
+    setEditingCaret(0);
     setEditingVisibility("public");
     setEditingAllowedViewerIds([]);
     setEditingExistingMedia([]);
     setEditingNewAttachments([]);
+  };
+
+  const insertMentionToComposer = (username: string, context: MentionContext) => {
+    const mentionText = `@${username} `;
+    const nextText =
+      (content || "").slice(0, context.start) +
+      mentionText +
+      (content || "").slice(context.end);
+    const nextCaret = context.start + mentionText.length;
+    setContent(nextText);
+    setComposerCaret(nextCaret);
+    window.setTimeout(() => {
+      const input = composerTextareaRef.current;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange(nextCaret, nextCaret);
+    }, 0);
+  };
+
+  const insertMentionToEditing = (username: string, context: MentionContext) => {
+    const mentionText = `@${username} `;
+    const nextText =
+      (editingContent || "").slice(0, context.start) +
+      mentionText +
+      (editingContent || "").slice(context.end);
+    const nextCaret = context.start + mentionText.length;
+    setEditingContent(nextText);
+    setEditingCaret(nextCaret);
+    window.setTimeout(() => {
+      const input = editTextareaRef.current;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange(nextCaret, nextCaret);
+    }, 0);
   };
 
   const handleSubmitEditPost = async () => {
@@ -1600,6 +1721,29 @@ const FeedView = () => {
     } finally {
       setCommentSubmittingMap((prev) => ({ ...prev, [postId]: false }));
     }
+  };
+
+  const insertMentionToComment = (
+    postId: string,
+    username: string,
+    context: MentionContext,
+  ) => {
+    const currentText = commentInputMap[postId] || "";
+    const mentionText = `@${username} `;
+    const nextText =
+      currentText.slice(0, context.start) +
+      mentionText +
+      currentText.slice(context.end);
+    const nextCaret = context.start + mentionText.length;
+    setCommentInputMap((prev) => ({ ...prev, [postId]: nextText }));
+    setCommentCaretMap((prev) => ({ ...prev, [postId]: nextCaret }));
+
+    window.setTimeout(() => {
+      const input = document.getElementById(`comment-input-${postId}`) as HTMLInputElement | null;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange(nextCaret, nextCaret);
+    }, 0);
   };
 
   const handleSelectSearchedUser = (targetUser: User) => {
@@ -2295,7 +2439,27 @@ const FeedView = () => {
                   <Textarea
                     ref={composerTextareaRef}
                     value={content}
-                    onChange={(e) => setContent(e.target.value)}
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      const nextCaret = e.currentTarget.selectionStart ?? nextValue.length;
+                      setContent(nextValue);
+                      setComposerCaret(nextCaret);
+                    }}
+                    onClick={(e) => setComposerCaret(e.currentTarget.selectionStart ?? (content || "").length)}
+                    onKeyUp={(e) => setComposerCaret(e.currentTarget.selectionStart ?? (content || "").length)}
+                    onKeyDown={(e) => {
+                      if (
+                        composerMentionContext &&
+                        composerMentionCandidates.length > 0 &&
+                        (e.key === "Enter" || e.key === "Tab")
+                      ) {
+                        e.preventDefault();
+                        insertMentionToComposer(
+                          composerMentionCandidates[0].username,
+                          composerMentionContext,
+                        );
+                      }
+                    }}
                     placeholder={
                       composerMode === "story"
                         ? "Viết nội dung tin..."
@@ -2304,6 +2468,29 @@ const FeedView = () => {
                     rows={composerMode === "story" ? 10 : 6}
                     className="resize-none border-0 px-0 text-base sm:text-lg leading-snug shadow-none focus-visible:ring-0"
                   />
+                  {composerMentionContext && composerMentionCandidates.length > 0 && (
+                    <div className="rounded-xl border bg-background p-1 shadow-sm">
+                      {composerMentionCandidates.map((friend) => (
+                        <button
+                          key={`composer-mention-${friend._id}`}
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-muted"
+                          onClick={() =>
+                            insertMentionToComposer(friend.username, composerMentionContext)
+                          }
+                        >
+                          <Avatar className="h-6 w-6">
+                            <AvatarImage src={friend.avatarUrl ?? undefined} alt={friend.displayName} />
+                            <AvatarFallback>{friend.displayName?.charAt(0) || "U"}</AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-medium text-foreground">{friend.displayName}</p>
+                            <p className="truncate text-[11px] text-muted-foreground">@{friend.username}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {composerMode === "story" && pendingStoryType === "music" && (
                     <div className="rounded-xl border bg-muted/40 p-3">
                       <div className="mb-2 flex items-center justify-between gap-2">
@@ -2581,12 +2768,56 @@ const FeedView = () => {
               />
 
               <Textarea
+                ref={editTextareaRef}
                 value={editingContent}
-                onChange={(event) => setEditingContent(event.target.value)}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  const nextCaret = event.currentTarget.selectionStart ?? nextValue.length;
+                  setEditingContent(nextValue);
+                  setEditingCaret(nextCaret);
+                }}
+                onClick={(event) => setEditingCaret(event.currentTarget.selectionStart ?? (editingContent || "").length)}
+                onKeyUp={(event) => setEditingCaret(event.currentTarget.selectionStart ?? (editingContent || "").length)}
+                onKeyDown={(event) => {
+                  if (
+                    editingMentionContext &&
+                    editingMentionCandidates.length > 0 &&
+                    (event.key === "Enter" || event.key === "Tab")
+                  ) {
+                    event.preventDefault();
+                    insertMentionToEditing(
+                      editingMentionCandidates[0].username,
+                      editingMentionContext,
+                    );
+                  }
+                }}
                 placeholder="Nhập nội dung bài viết"
                 rows={6}
                 className="resize-none"
               />
+              {editingMentionContext && editingMentionCandidates.length > 0 && (
+                <div className="rounded-xl border bg-background p-1 shadow-sm">
+                  {editingMentionCandidates.map((friend) => (
+                    <button
+                      key={`editing-mention-${friend._id}`}
+                      type="button"
+                      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-muted"
+                      onClick={() =>
+                        insertMentionToEditing(friend.username, editingMentionContext)
+                      }
+                    >
+                      <Avatar className="h-6 w-6">
+                        <AvatarImage src={friend.avatarUrl ?? undefined} alt={friend.displayName} />
+                        <AvatarFallback>{friend.displayName?.charAt(0) || "U"}</AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium text-foreground">{friend.displayName}</p>
+                        <p className="truncate text-[11px] text-muted-foreground">@{friend.username}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div className="space-y-2 rounded-xl border p-3">
                 <div className="flex items-center justify-between">
@@ -2925,7 +3156,9 @@ const FeedView = () => {
 
                       return (
                         <>
-                          <p className="mt-3 whitespace-pre-wrap text-base leading-snug sm:text-lg">{visibleContent}</p>
+                          <p className="mt-3 whitespace-pre-wrap text-base leading-snug sm:text-lg">
+                            {renderTextWithMentions(visibleContent)}
+                          </p>
                           {canExpandPost && (
                             <button
                               type="button"
@@ -2973,7 +3206,7 @@ const FeedView = () => {
                         </button>
                         {post.sharedPost.content?.trim() ? (
                           <p className="mt-2 whitespace-pre-wrap text-lg leading-snug">
-                            {post.sharedPost.content}
+                            {renderTextWithMentions(post.sharedPost.content)}
                           </p>
                         ) : null}
                       </div>
@@ -3193,7 +3426,7 @@ const FeedView = () => {
                               </Avatar>
                               <div className="min-w-0 rounded-xl bg-muted px-3 py-1.5">
                                 <p className="text-xs font-medium">{comment.author.displayName}</p>
-                                <p className="text-sm break-words">{comment.content}</p>
+                                <p className="text-sm break-words">{renderCommentWithMentions(comment.content)}</p>
                                 <p className="text-[11px] text-muted-foreground mt-0.5">
                                   {formatPostAgo(comment.createdAt)}
                                 </p>
@@ -3203,19 +3436,67 @@ const FeedView = () => {
                         )}
                       </div>
 
+                      {(() => {
+                        const commentValue = commentInputMap[post._id] || "";
+                        const caret = commentCaretMap[post._id] ?? commentValue.length;
+                        const mentionContext = getMentionContext(commentValue, caret);
+                        const mentionCandidates = mentionContext
+                          ? friends
+                              .filter((friend) => {
+                                const friendId = friend._id?.toString?.() || "";
+                                if (friendId && friendId === currentUserId) return false;
+                                const uname = (friend.username || "").toLowerCase();
+                                const dname = (friend.displayName || "").toLowerCase();
+                                if (!uname) return false;
+                                if (!mentionContext.query) return true;
+                                return uname.includes(mentionContext.query) || dname.includes(mentionContext.query);
+                              })
+                              .slice(0, 6)
+                          : [];
+                        return (
+                      <div className="space-y-2">
                       <div className="flex items-center gap-2 rounded-full bg-muted/70 px-2 py-1.5">
                         <Avatar className="h-8 w-8">
                           <AvatarImage src={user?.avatarUrl ?? undefined} alt={user?.displayName} />
                           <AvatarFallback>{user?.displayName?.charAt(0) || "U"}</AvatarFallback>
                         </Avatar>
                         <Input
+                          id={`comment-input-${post._id}`}
                           value={commentInputMap[post._id] || ""}
-                          onChange={(e) =>
-                            setCommentInputMap((prev) => ({ ...prev, [post._id]: e.target.value }))
-                          }
+                          onChange={(e) => {
+                            const nextValue = e.target.value;
+                            const nextCaret = e.currentTarget.selectionStart ?? nextValue.length;
+                            setCommentInputMap((prev) => ({ ...prev, [post._id]: nextValue }));
+                            setCommentCaretMap((prev) => ({
+                              ...prev,
+                              [post._id]: nextCaret,
+                            }));
+                          }}
+                          onClick={(e) => {
+                            const nextCaret = e.currentTarget.selectionStart ?? commentValue.length;
+                            setCommentCaretMap((prev) => ({
+                              ...prev,
+                              [post._id]: nextCaret,
+                            }));
+                          }}
+                          onKeyUp={(e) => {
+                            const nextCaret = e.currentTarget.selectionStart ?? commentValue.length;
+                            setCommentCaretMap((prev) => ({
+                              ...prev,
+                              [post._id]: nextCaret,
+                            }));
+                          }}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" && !e.shiftKey) {
                               e.preventDefault();
+                              if (mentionContext && mentionCandidates.length > 0) {
+                                insertMentionToComment(
+                                  post._id,
+                                  mentionCandidates[0].username,
+                                  mentionContext,
+                                );
+                                return;
+                              }
                               submitComment(post._id);
                             }
                           }}
@@ -3232,6 +3513,32 @@ const FeedView = () => {
                           Gửi
                         </Button>
                       </div>
+                      {mentionContext && mentionCandidates.length > 0 && (
+                        <div className="rounded-xl border bg-background p-1 shadow-sm">
+                          {mentionCandidates.map((friend) => (
+                            <button
+                              key={`mention-${post._id}-${friend._id}`}
+                              type="button"
+                              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-muted"
+                              onClick={() =>
+                                insertMentionToComment(post._id, friend.username, mentionContext)
+                              }
+                            >
+                              <Avatar className="h-6 w-6">
+                                <AvatarImage src={friend.avatarUrl ?? undefined} alt={friend.displayName} />
+                                <AvatarFallback>{friend.displayName?.charAt(0) || "U"}</AvatarFallback>
+                              </Avatar>
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-medium text-foreground">{friend.displayName}</p>
+                                <p className="truncate text-[11px] text-muted-foreground">@{friend.username}</p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </CardContent>

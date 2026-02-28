@@ -405,6 +405,8 @@ export const useSocketStore = create<SocketState>((set, get) => ({
         title = `${actorName} đã ${label} bài viết của bạn`;
       }
       if (type === "comment") title = `${actorName} đã bình luận bài viết của bạn`;
+      if (type === "mention_comment") title = `${actorName} đã nhắc bạn trong một bình luận`;
+      if (type === "mention_post") title = `${actorName} đã nhắc bạn trong một bài viết`;
       if (type === "share") title = `${actorName} đã chia sẻ bài viết của bạn`;
 
       useNotificationStore.getState().addNotification({
@@ -416,6 +418,10 @@ export const useSocketStore = create<SocketState>((set, get) => ({
             ? content
             : type === "comment"
               ? "Bình luận mới trên bài viết của bạn"
+              : type === "mention_comment"
+                ? "Bạn vừa được nhắc tới trong phần bình luận"
+                : type === "mention_post"
+                  ? "Bạn vừa được nhắc tới trong bài viết"
               : "Mở bảng tin để xem chi tiết",
         avatarUrl: actor?.avatarUrl ?? null,
         postId,

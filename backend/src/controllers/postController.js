@@ -2,6 +2,7 @@ import Post from "../models/Post.js";
 import Friend from "../models/Friend.js";
 import PostComment from "../models/PostComment.js";
 import PostReport from "../models/PostReport.js";
+import User from "../models/User.js";
 import { uploadMediaFromBuffer } from "../middlewares/uploadMiddleware.js";
 import { io } from "../socket/index.js";
 import { emitAdminReportNotification } from "../utils/adminNotificationHelper.js";
@@ -202,6 +203,68 @@ const emitPostActivityToAuthor = ({
   });
 };
 
+const extractMentionUsernames = (value = "") => {
+  const regex = /(^|\s)@([a-zA-Z0-9._-]{2,32})/g;
+  const usernameSet = new Set();
+  let match = regex.exec(value);
+  while (match) {
+    const username = (match[2] || "").trim().toLowerCase();
+    if (username) {
+      usernameSet.add(username);
+    }
+    match = regex.exec(value);
+  }
+  return Array.from(usernameSet);
+};
+
+const emitMentionNotifications = async ({
+  content,
+  post,
+  actor,
+  type = "mention_post",
+  postId,
+}) => {
+  try {
+    const mentionUsernames = extractMentionUsernames(content);
+    if (!mentionUsernames.length) return;
+
+    const actorId = actor?._id?.toString?.();
+    if (!actorId) return;
+
+    const mentionedUsers = await User.find({
+      username: { $in: mentionUsernames },
+    })
+      .select("_id username")
+      .lean();
+
+    const notified = new Set();
+    mentionedUsers.forEach((mentionedUser) => {
+      const targetId = mentionedUser?._id?.toString?.();
+      if (!targetId) return;
+      if (targetId === actorId) return;
+      if (notified.has(targetId)) return;
+      if (!canViewerAccessPost(post, targetId)) return;
+      notified.add(targetId);
+
+      io.to(targetId).emit("post-activity", {
+        id: `post-${type}-${postId}-${targetId}`,
+        type,
+        postId,
+        actor: {
+          _id: actor?._id,
+          displayName: actor?.displayName,
+          avatarUrl: actor?.avatarUrl ?? null,
+        },
+        content: content || "",
+        createdAt: new Date().toISOString(),
+        reactionType: null,
+      });
+    });
+  } catch (error) {
+    console.error("Lỗi khi gửi mention notification", error);
+  }
+};
+
 export const createPost = async (req, res) => {
   try {
     const authorId = req.user._id;
@@ -287,6 +350,14 @@ export const createPost = async (req, res) => {
     await post.populate({
       path: "authorId",
       select: "_id displayName username avatarUrl isVerified",
+    });
+
+    await emitMentionNotifications({
+      content: trimmedContent || "",
+      post,
+      actor: req.user,
+      type: "mention_post",
+      postId: post._id,
     });
 
     return res.status(201).json({
@@ -430,6 +501,14 @@ export const updatePost = async (req, res) => {
 
     const commentCount = await PostComment.countDocuments({ postId: post._id });
     const shareCount = await Post.countDocuments({ sharedPostId: post._id });
+
+    await emitMentionNotifications({
+      content: trimmedContent || "",
+      post,
+      actor: req.user,
+      type: "mention_post",
+      postId: post._id,
+    });
 
     return res.status(200).json({
       message: "Cập nhật bài viết thành công",
@@ -640,6 +719,14 @@ export const addPostComment = async (req, res) => {
       content,
     });
 
+    await emitMentionNotifications({
+      content,
+      post,
+      actor: req.user,
+      type: "mention_comment",
+      postId,
+    });
+
     return res.status(201).json({
       message: "Đã bình luận",
       comment: buildCommentPayload(comment),
@@ -815,6 +902,14 @@ export const sharePost = async (req, res) => {
       type: "share",
       postId: original._id,
       content: trimmed,
+    });
+
+    await emitMentionNotifications({
+      content: trimmed,
+      post: sharedPost,
+      actor: req.user,
+      type: "mention_post",
+      postId: sharedPost._id,
     });
 
     return res.status(201).json({
