@@ -20,6 +20,8 @@ import Message from "../models/Message.js";
 import SupportRequest from "../models/SupportRequest.js";
 import UserFollow from "../models/UserFollow.js";
 import VerificationRequest from "../models/VerificationRequest.js";
+import ExamAttempt from "../models/ExamAttempt.js";
+import ExamUserState from "../models/ExamUserState.js";
 import {
   getVerifiedPrivilegeSnapshot,
   normalizeVerificationTier,
@@ -2332,6 +2334,208 @@ export const listAdminAuditLogs = async (req, res) => {
     return res.status(200).json({ logs, nextCursor });
   } catch (error) {
     console.error("Lỗi khi lấy audit log admin", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+export const createExamAttempt = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    const username = req.user?.username || "";
+    const displayName = req.user?.displayName || "";
+    const {
+      subjectId,
+      subjectName,
+      mode,
+      score,
+      total,
+      correct,
+      incorrect,
+      blank,
+      durationMinutes,
+      lessonAccuracy,
+    } = req.body || {};
+
+    const numericScore = Number(score);
+    const numericTotal = Number(total);
+    const numericCorrect = Number(correct);
+    const numericIncorrect = Number(incorrect);
+    const numericBlank = Number(blank);
+    const numericDuration = Number(durationMinutes || 0);
+
+    if (!userId) {
+      return res.status(401).json({ message: "Bạn chưa đăng nhập" });
+    }
+    if (
+      !Number.isFinite(numericScore) ||
+      !Number.isFinite(numericTotal) ||
+      !Number.isFinite(numericCorrect) ||
+      !Number.isFinite(numericIncorrect) ||
+      !Number.isFinite(numericBlank)
+    ) {
+      return res.status(400).json({ message: "Dữ liệu điểm thi không hợp lệ" });
+    }
+    if (numericTotal <= 0) {
+      return res.status(400).json({ message: "Tổng số câu phải lớn hơn 0" });
+    }
+
+    const attempt = await ExamAttempt.create({
+      userId,
+      username,
+      displayName,
+      subjectId: typeof subjectId === "string" && subjectId.trim() ? subjectId.trim() : "tin",
+      subjectName:
+        typeof subjectName === "string" && subjectName.trim()
+          ? subjectName.trim()
+          : "Tin học",
+      mode:
+        typeof mode === "string" && mode.trim() ? mode.trim() : "normal",
+      score: Math.max(0, Math.min(10, numericScore)),
+      total: Math.max(1, Math.floor(numericTotal)),
+      correct: Math.max(0, Math.floor(numericCorrect)),
+      incorrect: Math.max(0, Math.floor(numericIncorrect)),
+      blank: Math.max(0, Math.floor(numericBlank)),
+      durationMinutes: Math.max(0, Math.floor(numericDuration)),
+      lessonAccuracy:
+        lessonAccuracy && typeof lessonAccuracy === "object" ? lessonAccuracy : {},
+    });
+
+    return res.status(201).json({
+      message: "Đã lưu kết quả thi",
+      attempt: {
+        _id: attempt._id,
+        createdAt: attempt.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error("Lỗi khi lưu attempt thi", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+export const listMyExamAttempts = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    const { subjectId = "tin", limit = 50 } = req.query || {};
+    const parsedLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
+
+    const query = { userId };
+    if (typeof subjectId === "string" && subjectId.trim()) {
+      query.subjectId = subjectId.trim();
+    }
+
+    const attempts = await ExamAttempt.find(query)
+      .sort({ createdAt: -1 })
+      .limit(parsedLimit)
+      .lean();
+
+    return res.status(200).json({ attempts });
+  } catch (error) {
+    console.error("Lỗi khi lấy lịch sử thi của user", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+export const getMyExamState = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    const subjectId =
+      typeof req.query?.subjectId === "string" && req.query.subjectId.trim()
+        ? req.query.subjectId.trim()
+        : "tin";
+
+    const state = await ExamUserState.findOne({ userId, subjectId }).lean();
+
+    return res.status(200).json({
+      subjectId,
+      wrongQuestionSet: Array.isArray(state?.wrongQuestionSet)
+        ? state.wrongQuestionSet
+        : [],
+      noteMap: state?.noteMap || {},
+      updatedAt: state?.updatedAt || null,
+    });
+  } catch (error) {
+    console.error("Lỗi khi lấy trạng thái luyện thi của user", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+export const upsertMyExamState = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    const { subjectId, wrongQuestionSet, noteMap } = req.body || {};
+    const normalizedSubjectId =
+      typeof subjectId === "string" && subjectId.trim() ? subjectId.trim() : "tin";
+
+    const normalizedWrongSet = Array.isArray(wrongQuestionSet)
+      ? [...new Set(wrongQuestionSet.map((item) => (item || "").toString()).filter(Boolean))]
+      : [];
+
+    const normalizedNoteMap = {};
+    if (noteMap && typeof noteMap === "object") {
+      Object.entries(noteMap).forEach(([key, value]) => {
+        const safeKey = (key || "").toString().trim();
+        const safeValue = (value || "").toString().trim();
+        if (safeKey && safeValue) {
+          normalizedNoteMap[safeKey] = safeValue;
+        }
+      });
+    }
+
+    const updated = await ExamUserState.findOneAndUpdate(
+      { userId, subjectId: normalizedSubjectId },
+      {
+        $set: {
+          wrongQuestionSet: normalizedWrongSet,
+          noteMap: normalizedNoteMap,
+        },
+      },
+      { upsert: true, new: true },
+    ).lean();
+
+    return res.status(200).json({
+      message: "Đã lưu trạng thái luyện thi",
+      subjectId: normalizedSubjectId,
+      wrongQuestionSet: updated?.wrongQuestionSet || [],
+      noteMap: updated?.noteMap || {},
+      updatedAt: updated?.updatedAt || new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Lỗi khi lưu trạng thái luyện thi của user", error);
+    return res.status(500).json({ message: "Lỗi hệ thống" });
+  }
+};
+
+export const listExamAttemptsAdmin = async (req, res) => {
+  try {
+    const { limit = 300, keyword = "", subjectId = "all", mode = "all" } = req.query || {};
+    const parsedLimit = Math.min(Math.max(Number(limit) || 300, 1), 1000);
+    const query = {};
+
+    if (typeof subjectId === "string" && subjectId !== "all") {
+      query.subjectId = subjectId;
+    }
+    if (typeof mode === "string" && mode !== "all") {
+      query.mode = mode;
+    }
+
+    const cleanedKeyword = (keyword || "").toString().trim();
+    if (cleanedKeyword) {
+      const escaped = escapeRegex(cleanedKeyword);
+      query.$or = [
+        { displayName: { $regex: escaped, $options: "i" } },
+        { username: { $regex: escaped, $options: "i" } },
+      ];
+    }
+
+    const attempts = await ExamAttempt.find(query)
+      .sort({ createdAt: -1 })
+      .limit(parsedLimit)
+      .lean();
+
+    return res.status(200).json({ attempts });
+  } catch (error) {
+    console.error("Lỗi khi lấy danh sách attempt thi", error);
     return res.status(500).json({ message: "Lỗi hệ thống" });
   }
 };

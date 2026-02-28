@@ -2,6 +2,104 @@ import api from "@/lib/axios";
 import type { Friend, RelationshipRequest, User } from "@/types/user";
 
 export const userService = {
+  createExamAttempt: async (payload: {
+    subjectId: string;
+    subjectName: string;
+    mode:
+      | "normal"
+      | "mediumHard"
+      | "hard"
+      | "wrongOnly"
+      | "custom"
+      | "sprint15"
+      | "lesson"
+      | "python45";
+    score: number;
+    total: number;
+    correct: number;
+    incorrect: number;
+    blank: number;
+    durationMinutes: number;
+    lessonAccuracy: Record<string, { total: number; correct: number }>;
+  }) => {
+    const res = await api.post("/users/exams/attempts", payload);
+    return res.data;
+  },
+  listAdminExamAttempts: async (params?: {
+    limit?: number;
+    keyword?: string;
+    subjectId?: string;
+    mode?: string;
+  }) => {
+    const res = await api.get("/users/admin/exams/attempts", { params });
+    return res.data as {
+      attempts: Array<{
+        _id: string;
+        createdAt: string;
+        userId: string;
+        username: string;
+        displayName: string;
+        subjectId: string;
+        subjectName: string;
+        mode:
+          | "normal"
+          | "mediumHard"
+          | "hard"
+          | "wrongOnly"
+          | "custom"
+          | "sprint15"
+          | "lesson"
+          | "python45";
+        score: number;
+        total: number;
+        correct: number;
+        incorrect: number;
+        blank: number;
+        durationMinutes: number;
+        lessonAccuracy: Record<string, { total: number; correct: number }>;
+      }>;
+    };
+  },
+  listMyExamAttempts: async (params?: { subjectId?: string; limit?: number }) => {
+    const res = await api.get("/users/exams/attempts/me", { params });
+    return res.data as {
+      attempts: Array<{
+        _id: string;
+        createdAt: string;
+        mode:
+          | "normal"
+          | "mediumHard"
+          | "hard"
+          | "wrongOnly"
+          | "custom"
+          | "sprint15"
+          | "lesson"
+          | "python45";
+        score: number;
+        total: number;
+        correct: number;
+        durationMinutes: number;
+        lessonAccuracy: Record<string, { total: number; correct: number }>;
+      }>;
+    };
+  },
+  getMyExamState: async (subjectId: string) => {
+    const res = await api.get("/users/exams/state", { params: { subjectId } });
+    return res.data as {
+      subjectId: string;
+      wrongQuestionSet: string[];
+      noteMap: Record<string, string>;
+      updatedAt?: string | null;
+    };
+  },
+  upsertMyExamState: async (payload: {
+    subjectId: string;
+    wrongQuestionSet: string[];
+    noteMap: Record<string, string>;
+  }) => {
+    const res = await api.put("/users/exams/state", payload);
+    return res.data;
+  },
   updateProfile: async (payload: {
     displayName?: string;
     username?: string;

@@ -2,7 +2,7 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 
-const ADMIN_BYPASS = true; // tạm thời mở thẳng trang/admin API để test
+const ADMIN_BYPASS = false;
 
 const isAdminDevPath = (path = "") =>
   path.startsWith("/api/users/admin") ||

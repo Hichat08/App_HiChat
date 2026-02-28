@@ -13,6 +13,11 @@ import {
   getUserProfileById,
   followUser,
   listAdmins,
+  createExamAttempt,
+  getMyExamState,
+  listMyExamAttempts,
+  listExamAttemptsAdmin,
+  upsertMyExamState,
   listAdminAuditLogs,
   listUserReports,
   resolveUserReport,
@@ -65,15 +70,16 @@ router.get("/verification-request/me", getMyVerificationRequest);
 router.get("/verification/privileges", getMyVerifiedPrivileges);
 router.post("/verification-request", submitVerificationRequest);
 router.get("/banner", getAppBanner);
-router.get("/admin/users", listAdmins);
-router.get("/admin/audit-logs", listAdminAuditLogs);
+router.get("/admin/users", requireAdmin, listAdmins);
+router.get("/admin/audit-logs", requireAdmin, listAdminAuditLogs);
+router.get("/admin/exams/attempts", requireAdmin, listExamAttemptsAdmin);
 router.get("/admin/reports", requireAdmin, listUserReports);
 router.patch("/admin/reports/:reportId/resolve", requireAdmin, resolveUserReport);
 router.patch("/admin/reports/:reportId/hide", requireAdmin, hideUserReport);
 router.delete("/admin/reports/:reportId", requireAdmin, deleteUserReport);
-router.patch("/admin/users/:userId/role", updateUserRole);
-router.patch("/admin/users/:userId/warn", warnUser);
-router.patch("/admin/users/:userId/lock", lockUser);
+router.patch("/admin/users/:userId/role", requireAdmin, updateUserRole);
+router.patch("/admin/users/:userId/warn", requireAdmin, warnUser);
+router.patch("/admin/users/:userId/lock", requireAdmin, lockUser);
 router.post("/admin/notify", requireAdmin, sendAdminNotification);
 router.post("/admin/banner", requireAdmin, uploadSingleImage("file"), updateAppBanner);
 router.get("/admin/dashboard", requireAdmin, getAdminDashboard);
@@ -103,6 +109,10 @@ router.post(
 );
 router.post("/admin/transfer", requireAdmin, transferAdminRole);
 router.post("/block-report", blockAndReportUser);
+router.post("/exams/attempts", createExamAttempt);
+router.get("/exams/attempts/me", listMyExamAttempts);
+router.get("/exams/state", getMyExamState);
+router.put("/exams/state", upsertMyExamState);
 router.delete("/me", deleteMyAccount);
 router.post("/:userId/follow", followUser);
 router.delete("/:userId/follow", unfollowUser);

@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { ArrowLeft, RefreshCw, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { userService } from "@/services/userService";
 
 type ExamModeKey =
   | "normal"
@@ -15,7 +16,7 @@ type ExamModeKey =
   | "python45";
 
 type ExamMonitorRecord = {
-  id: string;
+  _id: string;
   createdAt: string;
   userId: string;
   username: string;
@@ -31,8 +32,6 @@ type ExamMonitorRecord = {
   durationMinutes: number;
   lessonAccuracy: Record<string, { total: number; correct: number }>;
 };
-
-const STORAGE_ADMIN_MONITOR_KEY = "hichat_exam_admin_monitor_v1";
 
 const modeLabel: Record<ExamModeKey, string> = {
   normal: "Bình thường",
@@ -63,10 +62,15 @@ const AdminExamMonitorPage = () => {
   const [subjectFilter, setSubjectFilter] = useState("all");
   const [modeFilter, setModeFilter] = useState("all");
 
-  const loadRecords = () => {
+  const loadRecords = async () => {
     try {
-      const raw = localStorage.getItem(STORAGE_ADMIN_MONITOR_KEY);
-      const parsed = raw ? (JSON.parse(raw) as ExamMonitorRecord[]) : [];
+      const data = await userService.listAdminExamAttempts({
+        limit: 1000,
+        keyword: keyword.trim() || undefined,
+        subjectId: subjectFilter,
+        mode: modeFilter,
+      });
+      const parsed = (data?.attempts || []) as ExamMonitorRecord[];
       setRecords(parsed.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)));
     } catch (error) {
       console.error("load admin exam monitor failed", error);
@@ -75,10 +79,17 @@ const AdminExamMonitorPage = () => {
   };
 
   useEffect(() => {
-    loadRecords();
+    void loadRecords();
     const interval = window.setInterval(loadRecords, 15000);
-    return () => window.clearInterval(interval);
-  }, []);
+    const onCustomUpdate = () => {
+      void loadRecords();
+    };
+    window.addEventListener("hichat-exam-monitor-updated", onCustomUpdate);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("hichat-exam-monitor-updated", onCustomUpdate);
+    };
+  }, [keyword, subjectFilter, modeFilter]);
 
   const subjects = useMemo(
     () => Array.from(new Set(records.map((item) => `${item.subjectId}|${item.subjectName}`))),
@@ -92,7 +103,7 @@ const AdminExamMonitorPage = () => {
         !q ||
         item.displayName.toLowerCase().includes(q) ||
         item.username.toLowerCase().includes(q) ||
-        item.userId.toLowerCase().includes(q);
+        String(item.userId || "").toLowerCase().includes(q);
       const subjectOk = subjectFilter === "all" || item.subjectId === subjectFilter;
       const modeOk = modeFilter === "all" || item.mode === modeFilter;
       return keywordOk && subjectOk && modeOk;
@@ -250,7 +261,7 @@ const AdminExamMonitorPage = () => {
                 </thead>
                 <tbody>
                   {filteredRecords.map((item) => (
-                    <tr key={item.id} className="border-t border-border/60">
+                    <tr key={item._id} className="border-t border-border/60">
                       <td className="px-3 py-2 text-xs text-muted-foreground">{formatDateTime(item.createdAt)}</td>
                       <td className="px-3 py-2">
                         <p className="font-medium text-foreground">{item.displayName}</p>

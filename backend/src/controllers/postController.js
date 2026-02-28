@@ -55,7 +55,7 @@ const canViewerAccessPost = (post, viewerId) => {
   const author = post.authorId?._id?.toString?.() ?? post.authorId?.toString?.();
 
   if (post.status && post.status !== "active") {
-    return author === viewer;
+    return false;
   }
 
   if (author === viewer) return true;
@@ -456,7 +456,10 @@ export const getPostFeed = async (req, res) => {
 
     const query = {
       $or: [
-        { authorId: userId },
+        {
+          ...activeStatusQuery,
+          authorId: userId,
+        },
         {
           ...activeStatusQuery,
           visibility: POST_VISIBILITY.PUBLIC,

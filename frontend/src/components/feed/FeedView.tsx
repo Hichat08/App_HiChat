@@ -340,6 +340,11 @@ const mergeFeedPostsStable = (currentPosts: Post[], incomingPosts: Post[]) => {
   return [...newPosts, ...merged];
 };
 
+const isActivePost = (post: Post) => {
+  const status = post.status || "active";
+  return status === "active";
+};
+
 const FeedView = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -455,11 +460,11 @@ const FeedView = () => {
     [storyOnlyPostIdSet, storyTypeByPostId]
   );
   const visibleFeedPosts = useMemo(
-    () => posts.filter((post) => !isStoryPost(post)),
+    () => posts.filter((post) => isActivePost(post) && !isStoryPost(post)),
     [posts, isStoryPost]
   );
   const activeStoryPosts = useMemo(
-    () => posts.filter((post) => isStoryPost(post) && isStoryActive(post.createdAt)),
+    () => posts.filter((post) => isActivePost(post) && isStoryPost(post) && isStoryActive(post.createdAt)),
     [isStoryPost, posts, storyNowMs]
   );
   const shouldRenderInlineSuggestions =
@@ -941,7 +946,7 @@ const FeedView = () => {
         setFeedLoading(true);
       }
       const res = await postService.getFeed(undefined, limit);
-      const incomingPosts = res.posts || [];
+      const incomingPosts = (res.posts || []).filter(isActivePost);
       setPosts((prev) => mergeFeedPostsStable(prev, incomingPosts));
     } catch (error: any) {
       if (!silent) {

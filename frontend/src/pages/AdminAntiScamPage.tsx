@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import {
   Activity,
@@ -13,6 +14,7 @@ import {
   Lock,
   Megaphone,
   MessageCircle,
+  Monitor,
   Search,
   Settings,
   Shield,
@@ -1043,6 +1045,14 @@ const AdminAntiScamPage = () => {
                 ) : null}
               </button>
             ))}
+          </div>
+          <div className="mt-3 border-t border-slate-200 pt-3">
+            <Button asChild variant="outline" className="w-full justify-start gap-2">
+              <Link to="/admin/exam-monitor">
+                <Monitor className="h-4 w-4" />
+                Giám sát thi thử
+              </Link>
+            </Button>
           </div>
         </aside>
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ArrowLeft, ChevronRight, CircleDot, X } from "lucide-react";
 import { toast } from "sonner";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { TIN_RAW_QUESTIONS } from "@/data/tinMockQuestions";
+import { userService } from "@/services/userService";
 
 type OptionLabel = "A" | "B" | "C" | "D";
 
@@ -90,11 +91,6 @@ type ExamMonitorRecord = {
   lessonAccuracy: Record<string, { total: number; correct: number }>;
 };
 
-const STORAGE_ATTEMPTS_KEY = "hichat_tin_exam_attempts_v1";
-const STORAGE_WRONG_KEY = "hichat_tin_exam_wrong_v1";
-const STORAGE_NOTES_KEY = "hichat_tin_exam_notes_v1";
-const STORAGE_ADMIN_MONITOR_KEY = "hichat_exam_admin_monitor_v1";
-
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 const shuffleArray = <T,>(items: T[]) => {
@@ -162,14 +158,21 @@ const classifyMistakeReason = (questionHtml: string) => {
   return "Lỗi đọc hiểu và chọn đáp án";
 };
 
-const persistAdminMonitorRecord = (record: ExamMonitorRecord) => {
+const persistAdminMonitorRecord = async (record: ExamMonitorRecord) => {
   try {
-    const raw = localStorage.getItem(STORAGE_ADMIN_MONITOR_KEY);
-    const list = raw ? (JSON.parse(raw) as ExamMonitorRecord[]) : [];
-    localStorage.setItem(
-      STORAGE_ADMIN_MONITOR_KEY,
-      JSON.stringify([...list, record].slice(-500))
-    );
+    await userService.createExamAttempt({
+      subjectId: record.subjectId,
+      subjectName: record.subjectName,
+      mode: record.mode,
+      score: record.score,
+      total: record.total,
+      correct: record.correct,
+      incorrect: record.incorrect,
+      blank: record.blank,
+      durationMinutes: record.durationMinutes,
+      lessonAccuracy: record.lessonAccuracy,
+    });
+    window.dispatchEvent(new Event("hichat-exam-monitor-updated"));
   } catch (error) {
     console.error("save admin exam monitor failed", error);
   }
@@ -191,6 +194,7 @@ const MockExamSubjectPage = () => {
   const navigate = useNavigate();
   const { subjectId } = useParams();
   const user = useAuthStore((state) => state.user);
+  const currentUserId = user?._id || "";
   const displayName = user?.displayName?.trim() || "User Một";
 
   const currentSubjectName = useMemo(
@@ -208,6 +212,7 @@ const MockExamSubjectPage = () => {
 
   const [examQuestions, setExamQuestions] = useState<ExamQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<number, OptionLabel>>({});
+  const answersRef = useRef<Record<number, OptionLabel>>({});
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
@@ -219,6 +224,7 @@ const MockExamSubjectPage = () => {
   const [noteDraft, setNoteDraft] = useState("");
   const [examStartedAt, setExamStartedAt] = useState<number | null>(null);
   const [activeMode, setActiveMode] = useState<ExamModeKey>("normal");
+  const [examDataLoading, setExamDataLoading] = useState(false);
 
   const hasExam = examQuestions.length > 0;
   const isRunning = hasExam && !submitted;
@@ -252,29 +258,55 @@ const MockExamSubjectPage = () => {
   }, []);
 
   useEffect(() => {
-    try {
-      const rawAttempts = localStorage.getItem(STORAGE_ATTEMPTS_KEY);
-      const rawWrong = localStorage.getItem(STORAGE_WRONG_KEY);
-      const rawNotes = localStorage.getItem(STORAGE_NOTES_KEY);
-      if (rawAttempts) setAttemptHistory(JSON.parse(rawAttempts) as AttemptRecord[]);
-      if (rawWrong) setWrongQuestionSet(JSON.parse(rawWrong) as Record<string, true>);
-      if (rawNotes) setNoteMap(JSON.parse(rawNotes) as Record<string, string>);
-    } catch (error) {
-      console.error("load exam local data failed", error);
-    }
-  }, []);
+    if (!isTinSubject || !currentUserId) return;
+    let cancelled = false;
+
+    const loadExamData = async () => {
+      try {
+        setExamDataLoading(true);
+        const [attemptRes, stateRes] = await Promise.all([
+          userService.listMyExamAttempts({ subjectId: subjectId || "tin", limit: 100 }),
+          userService.getMyExamState(subjectId || "tin"),
+        ]);
+        if (cancelled) return;
+
+        const normalizedAttempts: AttemptRecord[] = (attemptRes?.attempts || [])
+          .map((item) => ({
+            id: item._id,
+            createdAt: item.createdAt,
+            mode: item.mode,
+            score: item.score,
+            total: item.total,
+            correct: item.correct,
+            durationMinutes: item.durationMinutes,
+            lessonAccuracy: item.lessonAccuracy || {},
+          }))
+          .sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt))
+          .slice(-50);
+        setAttemptHistory(normalizedAttempts);
+
+        const wrongMap: Record<string, true> = {};
+        (stateRes?.wrongQuestionSet || []).forEach((questionHtml) => {
+          if (questionHtml) wrongMap[questionHtml] = true;
+        });
+        setWrongQuestionSet(wrongMap);
+        setNoteMap(stateRes?.noteMap || {});
+      } catch (error) {
+        console.error("load exam data from mongodb failed", error);
+      } finally {
+        if (!cancelled) setExamDataLoading(false);
+      }
+    };
+
+    void loadExamData();
+    return () => {
+      cancelled = true;
+    };
+  }, [isTinSubject, currentUserId, subjectId]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_ATTEMPTS_KEY, JSON.stringify(attemptHistory.slice(0, 50)));
-  }, [attemptHistory]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_WRONG_KEY, JSON.stringify(wrongQuestionSet));
-  }, [wrongQuestionSet]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_NOTES_KEY, JSON.stringify(noteMap));
-  }, [noteMap]);
+    answersRef.current = answers;
+  }, [answers]);
 
   useEffect(() => {
     if (!tinLessonPacks.length) return;
@@ -467,6 +499,7 @@ const MockExamSubjectPage = () => {
 
     setExamQuestions(generated);
     setAnswers({});
+    answersRef.current = {};
     setSecondsLeft(safeDuration * 60);
     setSubmitted(false);
     setSummary(null);
@@ -476,6 +509,23 @@ const MockExamSubjectPage = () => {
     setActiveMode(mode);
     setQuickExamOpen(false);
     setAllPacksOpen(false);
+  };
+
+  const persistMyExamState = async (
+    nextWrongQuestionSet: Record<string, true>,
+    nextNoteMap: Record<string, string>,
+  ) => {
+    if (!isTinSubject || !currentUserId) return;
+    try {
+      await userService.upsertMyExamState({
+        subjectId: subjectId || "tin",
+        wrongQuestionSet: Object.keys(nextWrongQuestionSet),
+        noteMap: nextNoteMap,
+      });
+    } catch (error) {
+      console.error("save exam state to mongodb failed", error);
+      toast.error("Không thể lưu tiến độ luyện thi lên hệ thống.");
+    }
   };
 
   const handleStartExam = () => {
@@ -568,11 +618,13 @@ const MockExamSubjectPage = () => {
 
   const handleChooseAnswer = (questionId: number, label: OptionLabel) => {
     if (submitted) return;
-    setAnswers((prev) => ({ ...prev, [questionId]: label }));
+    const nextAnswers = { ...answersRef.current, [questionId]: label };
+    answersRef.current = nextAnswers;
+    setAnswers(nextAnswers);
     setTimeout(() => {
       setCurrentQuestionIndex((prev) => {
         if (prev >= examQuestions.length - 1) {
-          handleSubmitExam(true);
+          toast.message("Đã chọn đáp án câu cuối, bấm \"Nộp bài\" để hoàn tất.");
           return prev;
         }
         return prev + 1;
@@ -580,9 +632,10 @@ const MockExamSubjectPage = () => {
     }, 120);
   };
 
-  const handleSubmitExam = (force = false) => {
+  const handleSubmitExam = (force = false, providedAnswers?: Record<number, OptionLabel>) => {
     if (!examQuestions.length) return;
-    const blankNow = examQuestions.length - Object.keys(answers).length;
+    const answerSnapshot = providedAnswers || answersRef.current;
+    const blankNow = examQuestions.length - Object.keys(answerSnapshot).length;
     if (!force && blankNow > 0) {
       const ok = window.confirm(
         `Bạn còn ${blankNow} câu chưa chọn đáp án. Vẫn nộp bài?`
@@ -596,7 +649,7 @@ const MockExamSubjectPage = () => {
     const lessonAccuracy: Record<string, { total: number; correct: number }> = {};
 
     const items: ExamResultItem[] = examQuestions.map((q) => {
-      const userAnswerLabel = answers[q.id] ?? null;
+      const userAnswerLabel = answerSnapshot[q.id] ?? null;
       const isCorrect = userAnswerLabel === q.correctDisplayLabel;
       const correctOption = q.options.find((opt) => opt.displayLabel === q.correctDisplayLabel);
       const userOption = userAnswerLabel
@@ -644,6 +697,7 @@ const MockExamSubjectPage = () => {
       }
     });
     setWrongQuestionSet(wrongMap);
+    void persistMyExamState(wrongMap, noteMap);
 
     const durationSpentMinutes = examStartedAt
       ? Math.max(1, Math.round((Date.now() - examStartedAt) / 60000))
@@ -660,7 +714,7 @@ const MockExamSubjectPage = () => {
     };
     setAttemptHistory((prev) => [...prev, record].slice(-50));
 
-    persistAdminMonitorRecord({
+    void persistAdminMonitorRecord({
       id: record.id,
       createdAt: record.createdAt,
       userId: user?._id || "unknown",
@@ -686,6 +740,7 @@ const MockExamSubjectPage = () => {
   const handleResetExam = () => {
     setExamQuestions([]);
     setAnswers({});
+    answersRef.current = {};
     setSecondsLeft(0);
     setSubmitted(false);
     setSummary(null);
@@ -704,6 +759,7 @@ const MockExamSubjectPage = () => {
       next[currentQuestionKey] = trimmed;
     }
     setNoteMap(next);
+    void persistMyExamState(wrongQuestionSet, next);
     toast.success(trimmed ? "Đã lưu ghi chú câu hỏi." : "Đã xoá ghi chú câu hỏi.");
   };
 
@@ -732,6 +788,11 @@ const MockExamSubjectPage = () => {
             </Button>
           )}
         </div>
+        {examDataLoading && (
+          <p className="text-xs text-muted-foreground">
+            Đang đồng bộ dữ liệu luyện thi từ hệ thống...
+          </p>
+        )}
 
         <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <div className="rounded-xl border border-border bg-card px-3 py-2">
